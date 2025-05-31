@@ -1,0 +1,87 @@
+# config.yaml
+
+modules:
+  asr: # 自动语音识别 (ASR) 模块
+    enabled: true # 是否启用此模块
+    module_category: "asr" # 模块类别，用于工厂模式查找对应的适配器工厂
+    enable_module: "funasr_sensevoice" # 或者 "openai"，根据需要选择
+    adapter_type: "funasr_sensevoice"
+    config: # 此模块的特定配置
+      funasr_sensevoice:
+        model_dir: "models/asr/SenseVoiceSmall" # ASR 模型文件所在的目录路径
+                                               # 请确保此路径相对于项目根目录是正确的
+        device: "cpu" # 指定运行模型的设备 ("cpu" 或 "cuda" 如果GPU可用且已配置)
+        sample_rate: 16000 # ASR 期望的输入音频采样率 (例如 16000 Hz)
+        channels: 1 # ASR 期望的输入音频通道数 (例如 1 代表单声道)
+        sample_width: 2 # 每个音频样本的字节数 (例如 2 代表 16-bit PCM 音频)
+        language: "zh" # 主要识别的语言代码 (例如 "zh", "en", "auto" 如果适配器支持自动检测)
+        # output_dir: "tmp/asr_intermediate_files" # 可选: 如果适配器支持，可以指定保存中间结果的目录
+
+  llm: # 大语言模型 (LLM) 模块
+    enabled: true # 是否启用此模块
+    module_category: "llm" # 模块类别
+    adapter_type: "langchain" # LLM 适配器的类型，例如 "langchain", "direct_openai"
+                             # 需要与 `llm_factory.LLM_ADAPTER_REGISTRY` 中的键匹配
+    
+    # 新增: enable_module 用于指定当前要激活哪个提供商的配置
+    # 这个值应该是下面 'config' 块中某个提供商配置的键名 (例如 "openai" 或 "deepseek")
+    enable_module: "deepseek" # 或者 "openai"，根据需要选择
+
+    system_prompt: "你是一个非常乐于助人的AI智能助手，请用友善和专业的语气回答问题。" # 全局系统提示，可被特定提供商配置覆盖
+
+    config: # 包含所有受支持的 LLM 提供商的配置详情
+            # LangchainLLMAdapter 会根据上面的 'enable_module' 字段选择其中一个使用
+      openai: # OpenAI 提供商的配置
+        model_name: "gpt-3.5-turbo" # OpenAI 的模型名称
+        api_key_env_var: "OPENAI_API_KEY" # 存储 OpenAI API Key 的环境变量名称
+                                          # 运行时框架会从该环境变量读取密钥
+        # api_key: "sk-YOUR_OPENAI_KEY_HERE" # 或者直接在此处填写API Key (不推荐)
+        temperature: 0.7 # 控制生成文本的随机性，值越高越随机
+        # system_prompt: "针对OpenAI的特定系统提示" # 可选：覆盖全局 system_prompt
+
+      deepseek: # DeepSeek 提供商的配置
+        model_name: "deepseek-chat" # DeepSeek 的模型名称
+        api_key_env_var: "DEEPSEEK_API_KEY" # 存储 DeepSeek API Key 的环境变量名称
+        api_key: "REDACTED_API_KEY_1" # 或者直接填写 (不推荐)
+        temperature: 0.65 # DeepSeek 的温度参数
+        # system_prompt: "针对DeepSeek的特定系统提示" # 可选
+
+  tts: # 文本轉語音 (TTS) 模塊的頂層配置
+    enabled: true               # 是否啟用此 TTS 模塊
+    module_category: "tts"      # 模塊類別，用於工廠模式
+    adapter_type: "edge_tts"    # 指定要使用的 TTS 適配器類型 (例如 "edge_tts", "openai_tts")
+                                # 這將被 BaseTTS 用來查找下面的特定配置塊
+                                # 也可使用 "enable_module": "edge_tts"
+    save_generated_audio: true # 示例：是否保存生成的音頻文件 (此功能需在適配器中實現)
+    audio_save_path: "tmp" # 示例：如果保存，音頻文件的保存路徑
+    config: # 包含所有 TTS 適配器特定配置的容器
+      # --- EdgeTTS 適配器的特定配置 ---
+      edge_tts:
+        # BaseTTS 會從這裡讀取通用 TTS 參數 (如果存在且鍵名匹配)
+        # 也會從這裡讀取 EdgeTTS 特定的參數
+
+        # EdgeTTS 特定的核心參數
+        voice: "zh-CN-XiaoxiaoNeural" # EdgeTTS 使用的語音角色/模型名稱
+        rate: "+0%"                   # 語速調整，例如 "+10%", "-5%" (可選，默認為 "+0%")
+        volume: "+0%"                 # 音量調整，例如 "+20%", "-10%" (可選，默認為 "+0%")
+        # pitch: "+0Hz"               # 音調調整 (可選，EdgeTTS 支持)
+
+        # BaseTTS 會查找的通用輸出格式相關參數 (如果適配器 YAML 中定義了這些，則優先使用)
+        output_audio_format: "wav"      # TTS 最終輸出的音頻格式 ("wav", "opus", "mp3", "pcm")
+                                        # EdgeTTS 原生支持 mp3, opus 等，如果請求 pcm 或 wav，則需要轉換
+        sample_rate: 16000
+
+# --- 全局应用设置 ---
+global_settings:
+  log_level: "INFO" # 应用的全局日志级别 ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+
+# --- 输入处理器配置 (例如 WebSocket 服务器) ---
+# 注意: 此部分的结构和加载方式取决于您的 app_ws_server.py 如何设计。
+# 以下是一个示例结构，您可能需要根据实际情况调整。
+# 'app_ws_server.py' 在其 __init__ 中通过 self.config 直接访问这些顶级键。
+websocket_server: # WebSocket 服务器的特定配置
+  host: "0.0.0.0" # 监听的主机地址
+  port: 8765      # 监听的端口号
+  websocket_max_message_size: 1048576 # WebSocket 消息的最大大小 (字节, 例如 1MB)
+  # default_pipeline_name: "text_chat_pipeline" # 可选: 如果没有指定流水线，则使用的默认流水线
+                                              # (但这通常由 WebsocketInputHandler 或 ChatEngine 层面处理)
