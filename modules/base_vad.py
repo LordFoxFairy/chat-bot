@@ -4,7 +4,7 @@ from abc import abstractmethod
 from typing import AsyncGenerator, Optional, Dict, Any
 from data_models.audio_data import AudioData
 from modules.base_module import BaseModule
-from core_framework.event_manager import EventManager
+from core.event_manager import EventManager
 
 logger = logging.getLogger(__name__)
 

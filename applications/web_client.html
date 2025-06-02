@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebSocket客户端 (带VAD)</title>
+    <title>WebSocket客户端 (VAD与WAV流畅播放优化)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; margin: 0; background-color: #f3f4f6; display: flex; justify-content: center; align-items: center; min-height: 100vh; color: #374151; padding: 1rem;}
         .container { background-color: white; padding: 2rem; border-radius: 0.75rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); width: 100%; max-width: 500px; }
-        .btn { padding: 0.625rem 1.25rem; border-radius: 0.375rem; font-weight: 500; transition: background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out; display: inline-flex; align-items: center; justify-content: center; }
+        .btn { padding: 0.625rem 1.25rem; border-radius: 0.375rem; font-weight: 500; transition: background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
         .btn:focus { outline: 2px solid transparent; outline-offset: 2px; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5); }
         .btn-primary { background-color: #3b82f6; color: white; }
         .btn-primary:hover { background-color: #2563eb; }
@@ -20,7 +20,7 @@
         .btn-danger:hover { background-color: #dc2626; }
         .input-text { border: 1px solid #d1d5db; padding: 0.625rem; border-radius: 0.375rem; width: 100%; margin-bottom: 1rem; box-shadow: inset 0 1px 2px 0 rgba(0,0,0,0.05); }
         .input-text:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3); }
-        .status, .server-messages { margin-top: 1rem; padding: 0.875rem; border-radius: 0.375rem; font-size: 0.875rem; word-wrap: break-word; }
+        .status, .server-messages, .debug-area { margin-top: 1rem; padding: 0.875rem; border-radius: 0.375rem; font-size: 0.875rem; word-wrap: break-word; }
         .status-vad { font-weight: bold; }
         .status-info { background-color: #eff6ff; color: #3b82f6; border: 1px solid #bfdbfe; }
         .status-success { background-color: #f0fdf4; color: #22c55e; border: 1px solid #bbf7d0; }
@@ -28,21 +28,30 @@
         .hidden { display: none; }
         h1 { font-size: 1.75rem; font-weight: 600; margin-bottom: 1.5rem; text-align: center; color: #111827; }
         label { display: block; margin-bottom: 0.25rem; font-weight: 500; color: #4b5563; }
+        .debug-area a { color: #3b82f6; text-decoration: underline; }
+        .debug-area a:hover { color: #2563eb; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>WebSocket客户端 (带VAD)</h1>
+        <h1>WebSocket客户端 (VAD与WAV流畅播放优化)</h1>
 
         <div class="mb-4">
             <label for="wsUrl">WebSocket URL:</label>
-            <input type="text" id="wsUrlVad" class="input-text" value="ws://localhost:8766"> <button id="connectButtonVad" class="btn btn-primary w-full mb-2">连接</button>
+            <input type="text" id="wsUrlVad" class="input-text" value="ws://localhost:8766">
+            <button id="connectButtonVad" class="btn btn-primary w-full mb-2">连接</button>
             <button id="disconnectButtonVad" class="btn btn-secondary w-full hidden">断开连接</button>
         </div>
 
         <div class="mb-4">
-            <label for="textInputVad">发送文本:</label>
-            <textarea id="textInputVad" class="input-text" rows="2">你好，这是一条测试文本！</textarea>
+            <label for="clientSessionIdInput">客户端会话ID (UUID):</label>
+            <input type="text" id="clientSessionIdInput" class="input-text" readonly>
+            <button id="generateUuidButton" class="btn btn-secondary text-sm py-1 px-2 mb-2">产生新的UUID</button>
+        </div>
+
+        <div class="mb-4">
+            <label for="textInputVad">发送文本消息:</label>
+            <textarea id="textInputVad" class="input-text" rows="2">你好！</textarea>
             <button id="sendTextButtonVad" class="btn btn-primary w-full" disabled>发送文本</button>
         </div>
 
@@ -56,11 +65,16 @@
 
         <div id="statusAreaVad" class="status status-info">状态：未连接</div>
         <div id="vadStateDisplay" class="status status-info mt-2">VAD状态: 静默</div>
-        <div id="serverMessagesVad" class="server-messages bg-gray-100 border border-gray-200 mt-2 p-2 h-24 overflow-y-auto">服务器消息将显示在此...</div>
+        <div id="serverMessagesVad" class="server-messages bg-gray-100 border border-gray-200 mt-2 p-2 h-32 overflow-y-auto">服务器文本消息将显示在此...</div>
 
         <div class="mt-4">
-            <label>收到的音频:</label>
-            <audio id="audioPlayerVad" controls class="w-full"></audio>
+            <label>音频播放状态:</label>
+            <div id="audioPlaybackStatus" class="status status-info">播放器: 空闲</div>
+            <div id="decodedAudioQueueInfo" class="status status-info mt-1 text-xs">主累积PCM缓冲区时长: 0.00s</div>
+        </div>
+        <div id="audioDebugArea" class="debug-area bg-yellow-100 border border-yellow-300 mt-2 p-2 hidden">
+            <p><strong>完整音频流下载 (拼接原始WAV块):</strong></p>
+            <div id="completeStreamDownloadLink"></div>
         </div>
     </div>
 
@@ -68,6 +82,9 @@
         const wsUrlInputVad = document.getElementById('wsUrlVad');
         const connectButtonVad = document.getElementById('connectButtonVad');
         const disconnectButtonVad = document.getElementById('disconnectButtonVad');
+
+        const clientSessionIdInput = document.getElementById('clientSessionIdInput');
+        const generateUuidButton = document.getElementById('generateUuidButton');
 
         const textInputVad = document.getElementById('textInputVad');
         const sendTextButtonVad = document.getElementById('sendTextButtonVad');
@@ -77,15 +94,33 @@
         const statusAreaVad = document.getElementById('statusAreaVad');
         const vadStateDisplay = document.getElementById('vadStateDisplay');
         const serverMessagesVad = document.getElementById('serverMessagesVad');
-        const audioPlayerVad = document.getElementById('audioPlayerVad');
+        const audioPlaybackStatus = document.getElementById('audioPlaybackStatus');
+        const decodedAudioQueueInfo = document.getElementById('decodedAudioQueueInfo');
+        const audioDebugArea = document.getElementById('audioDebugArea');
+        const completeStreamDownloadLinkContainer = document.getElementById('completeStreamDownloadLink');
+
 
         let websocketVad = null;
-        let audioContextVad = null;
+        let micAudioContext = null;
         let mediaStreamVad = null;
         let audioWorkletNodeVad = null;
 
-        const TARGET_SAMPLE_RATE_VAD = 16000;
-        const SEND_BUFFER_SIZE_SAMPLES = 2048; // 每次通过WebSocket发送的PCM样本数 (Float32)
+        let serverPlaybackAudioContext = null;
+        let mainAccumulatedPcmData = new Float32Array(0);
+        let isServerAudioPlaying = false;
+        let currentSourceNode = null;
+        let nextChunkPlayTime = 0;
+
+        let accumulatedRawWavBlobs = [];
+
+        const TARGET_AUDIO_SAMPLE_RATE = 16000;
+        const SEND_BUFFER_SIZE_SAMPLES = 2048;
+
+        const MIN_PLAYBACK_CHUNK_DURATION_S = 1.0;  // 增加到1.0秒
+        const TARGET_PLAYBACK_CHUNK_DURATION_S = 2.5; // 目标播放的大块时长，例如2.5秒
+
+        const MAX_ACCUMULATED_PCM_DURATION_S = 7.0; // 主累积PCM缓冲区最多缓冲7秒
+        const PLAYBACK_START_DELAY_S = 0.05; // 50ms 的启动延迟 (可调整)
 
         const audioProcessorNameVad = 'vad-audio-processor';
         const audioProcessorCodeVad = `
@@ -94,41 +129,27 @@
                     super();
                     this.inputSampleRate = options.processorOptions.inputSampleRate;
                     this.outputSampleRate = options.processorOptions.outputSampleRate;
-                    this.sendBufferSizeSamples = options.processorOptions.sendBufferSizeSamples; // 最终发送给主线程的块大小
-
+                    this.sendBufferSizeSamples = options.processorOptions.sendBufferSizeSamples;
                     this.resampleRatio = this.inputSampleRate / this.outputSampleRate;
-                    this.inputBuffer = []; // 存储原始输入样本 (Float32)
-                    this.resampledBuffer = []; // 存储重采样后的样本 (Float32)
-
-                    // 简化的VAD参数
-                    this.vadThreshold = options.processorOptions.vadThreshold || 0.01; // RMS能量阈值
-                    this.vadSilenceFramesThreshold = options.processorOptions.vadSilenceFramesThreshold || 10; // 多少个连续静默帧后判断语音结束 (基于128样本的块)
-                    this.vadSpeechFramesMin = options.processorOptions.vadSpeechFramesMin || 3; // 至少多少个连续语音帧才判断语音开始
-                    this.vadSpeechPaddingFrames = options.processorOptions.vadSpeechPaddingFrames || 5; // 语音结束后多发送几帧作为拖尾
-
+                    this.inputBuffer = [];
+                    this.resampledBuffer = [];
+                    this.vadThreshold = options.processorOptions.vadThreshold || 0.01;
+                    this.vadSilenceFramesThreshold = options.processorOptions.vadSilenceFramesThreshold || 10;
+                    this.vadSpeechFramesMin = options.processorOptions.vadSpeechFramesMin || 3;
+                    this.vadSpeechPaddingFrames = options.processorOptions.vadSpeechPaddingFrames || 5;
                     this.isSpeaking = false;
                     this.silentFramesCount = 0;
                     this.speechFramesCount = 0;
                     this.paddingFramesSent = 0;
-
                     this.port.onmessage = (event) => {
-                        if (event.data === 'stop') {
-                            // console.log('[ProcessorVAD] Received stop signal.');
-                            this.flush(); // 停止时尝试刷新剩余缓冲区
-                        }
+                        if (event.data === 'stop') { this.flush(); }
                     };
-                    // console.log(\`[ProcessorVAD] Initialized. Input SR: \${this.inputSampleRate}, Output SR: \${this.outputSampleRate}, Send Buffer: \${this.sendBufferSizeSamples}, VAD Threshold: \${this.vadThreshold}\`);
                 }
-
                 calculateRMS(audioFrame) {
                     let sumOfSquares = 0;
-                    for (let i = 0; i < audioFrame.length; i++) {
-                        sumOfSquares += audioFrame[i] * audioFrame[i];
-                    }
+                    for (let i = 0; i < audioFrame.length; i++) { sumOfSquares += audioFrame[i] * audioFrame[i]; }
                     return Math.sqrt(sumOfSquares / audioFrame.length);
                 }
-
-                // 简化的线性插值重采样
                 resample(inputSamples) {
                     const outputSamples = [];
                     for (let i = 0; i < inputSamples.length / this.resampleRatio; i++) {
@@ -136,91 +157,59 @@
                         const inputIndexFloor = Math.floor(inputIndexFloat);
                         const inputIndexCeil = Math.ceil(inputIndexFloat);
                         const fraction = inputIndexFloat - inputIndexFloor;
-
                         let value;
-                        if (this.resampleRatio === 1) {
-                            value = inputSamples[inputIndexFloor];
-                        } else {
+                        if (this.resampleRatio === 1) { value = inputSamples[inputIndexFloor]; }
+                        else {
                             if (inputIndexCeil < inputSamples.length) {
-                                const val1 = inputSamples[inputIndexFloor];
-                                const val2 = inputSamples[inputIndexCeil];
+                                const val1 = inputSamples[inputIndexFloor]; const val2 = inputSamples[inputIndexCeil];
                                 value = val1 + (val2 - val1) * fraction;
-                            } else if (inputIndexFloor < inputSamples.length) {
-                                value = inputSamples[inputIndexFloor];
-                            } else {
-                                break;
-                            }
+                            } else if (inputIndexFloor < inputSamples.length) { value = inputSamples[inputIndexFloor]; }
+                            else { break; }
                         }
                         outputSamples.push(value);
                     }
                     return outputSamples;
                 }
-
                 flush() {
-                    // console.log('[ProcessorVAD] Flushing remaining resampled buffer.');
                     if (this.resampledBuffer.length > 0) {
-                        // 发送剩余的，即使不足一个完整块，主线程可以处理
                         this.port.postMessage({ type: 'audio_data', data: new Float32Array(this.resampledBuffer.slice()) });
                         this.resampledBuffer = [];
                     }
-                     this.port.postMessage({ type: 'vad_state', speaking: false, flushing: true });
+                    this.port.postMessage({ type: 'vad_state', speaking: false, flushing: true });
                 }
-
                 process(inputs, outputs, parameters) {
-                    const inputChannelData = inputs[0]?.[0]; // 通常是128个样本的Float32Array
-
-                    if (!inputChannelData || inputChannelData.length === 0) {
-                        return true;
-                    }
-
-                    // 1. 重采样当前小块 (例如128样本)
+                    const inputChannelData = inputs[0]?.[0];
+                    if (!inputChannelData || inputChannelData.length === 0) { return true; }
                     const currentResampledBlock = this.resample(inputChannelData);
-
                     if (currentResampledBlock.length === 0) return true;
-
-                    // 2. 简单VAD判断
-                    const rms = this.calculateRMS(currentResampledBlock); // 在重采样后的数据上计算RMS
+                    const rms = this.calculateRMS(currentResampledBlock);
                     const currentlyDetectedSpeech = rms > this.vadThreshold;
-
                     if (currentlyDetectedSpeech) {
-                        this.speechFramesCount++;
-                        this.silentFramesCount = 0;
+                        this.speechFramesCount++; this.silentFramesCount = 0;
                         if (this.speechFramesCount >= this.vadSpeechFramesMin && !this.isSpeaking) {
-                            this.isSpeaking = true;
-                            this.paddingFramesSent = 0;
+                            this.isSpeaking = true; this.paddingFramesSent = 0;
                             this.port.postMessage({ type: 'vad_state', speaking: true });
-                            // console.log(\`[ProcessorVAD] Speech started. RMS: \${rms.toFixed(4)}\`);
                         }
                     } else {
                         this.speechFramesCount = 0;
-                        if (this.isSpeaking) { // 如果之前在说话，现在静音了
+                        if (this.isSpeaking) {
                             this.silentFramesCount++;
                             if (this.silentFramesCount >= this.vadSilenceFramesThreshold) {
-                                this.isSpeaking = false; // 语音结束
+                                this.isSpeaking = false;
                                 this.port.postMessage({ type: 'vad_state', speaking: false });
-                                // console.log(\`[ProcessorVAD] Speech ended. RMS: \${rms.toFixed(4)}\`);
                             }
                         }
                     }
-
-                    // 3. 缓冲和发送
                     if (this.isSpeaking || (this.paddingFramesSent < this.vadSpeechPaddingFrames && !this.isSpeaking && this.silentFramesCount > 0) ) {
                         this.resampledBuffer.push(...currentResampledBlock);
-                        if (!this.isSpeaking && this.silentFramesCount > 0) { // 如果是发送拖尾帧
-                            this.paddingFramesSent++;
-                        }
-
+                        if (!this.isSpeaking && this.silentFramesCount > 0) { this.paddingFramesSent++; }
                         while (this.resampledBuffer.length >= this.sendBufferSizeSamples) {
                             const chunkToSend = this.resampledBuffer.splice(0, this.sendBufferSizeSamples);
                             this.port.postMessage({ type: 'audio_data', data: new Float32Array(chunkToSend) });
-                            // console.log(\`[ProcessorVAD] Sent \${chunkToSend.length} audio samples to main thread.\`);
                         }
                     } else if (this.resampledBuffer.length > 0 && !this.isSpeaking && this.silentFramesCount > 0) {
-                        // 如果语音已结束，且缓冲区中还有残留（通常是拖尾未满一个完整块），也发送掉
                          this.flush();
                     }
-
-
                     return true;
                 }
             }
@@ -233,23 +222,196 @@
             statusAreaVad.className = `status status-${type}`;
         }
         function updateVadStateDisplay(isSpeaking) {
-            vadStateDisplay.textContent = `VAD状态: ${isSpeaking ? '检测到语音' : '静默'}`;
+            vadStateDisplay.textContent = `VAD状态: ${isSpeaking ? '侦测到语音' : '静默'}`;
             vadStateDisplay.className = `status ${isSpeaking ? 'status-success' : 'status-info'} mt-2 status-vad`;
         }
-
-
         function appendServerMessageVad(message) {
             const p = document.createElement('p');
-            p.textContent = message;
+            const timestamp = new Date().toLocaleTimeString();
+            p.innerHTML = `<span class="text-xs text-gray-500">[${timestamp}]</span> ${message}`;
             serverMessagesVad.appendChild(p);
             serverMessagesVad.scrollTop = serverMessagesVad.scrollHeight;
         }
+        function updateAudioPlaybackStatus(message) {
+            audioPlaybackStatus.textContent = `播放器: ${message}`;
+            console.log(`[ClientVAD Playback Status] ${message}`);
+        }
+        function updateAccumulatedPcmInfo() {
+            const duration = mainAccumulatedPcmData.length / TARGET_AUDIO_SAMPLE_RATE;
+            decodedAudioQueueInfo.textContent = `主累积PCM缓冲区时长: ${duration.toFixed(2)}s (样本数: ${mainAccumulatedPcmData.length})`;
+            console.log(`[ClientVAD Buffer] 主累积PCM: ${mainAccumulatedPcmData.length} 样本, ${duration.toFixed(3)}s`);
+        }
 
-        connectButtonVad.onclick = () => {
+
+        function generateAndSetUuid() {
+            const newUuid = self.crypto.randomUUID();
+            clientSessionIdInput.value = newUuid;
+            localStorage.setItem('clientSessionIdForChatbot', newUuid);
+            console.log(`[ClientVAD] 产生并设定新的客户端会话ID: ${newUuid}`);
+            return newUuid;
+        }
+
+        generateUuidButton.onclick = generateAndSetUuid;
+
+        let currentClientSessionId = localStorage.getItem('clientSessionIdForChatbot');
+        if (!currentClientSessionId) {
+            currentClientSessionId = generateAndSetUuid();
+        } else {
+            clientSessionIdInput.value = currentClientSessionId;
+            console.log(`[ClientVAD] 从 localStorage 加载会话ID: ${currentClientSessionId}`);
+        }
+
+        async function initializeServerPlaybackAudioContext() {
+            if (!serverPlaybackAudioContext) {
+                try {
+                    serverPlaybackAudioContext = new (window.AudioContext || window.webkitAudioContext)({
+                        sampleRate: TARGET_AUDIO_SAMPLE_RATE
+                    });
+                    if (serverPlaybackAudioContext.state === 'suspended') {
+                        await serverPlaybackAudioContext.resume();
+                    }
+                    console.log(`[ClientVAD Playback] 服务器音频播放的 AudioContext 已初始化。请求/实际采样率: ${serverPlaybackAudioContext.sampleRate}`);
+                    updateAudioPlaybackStatus("已准备");
+                } catch (e) {
+                    console.error("[ClientVAD Playback] 初始化服务器音频播放的 AudioContext 失败:", e);
+                    updateAudioPlaybackStatus(`错误: ${e.message}`);
+                    appendServerMessageVad(`错误：无法初始化音频播放器 - ${e.message}`);
+                }
+            } else if (serverPlaybackAudioContext.state === 'suspended') {
+                 await serverPlaybackAudioContext.resume();
+                 console.log('[ClientVAD Playback] 服务器音频播放的 AudioContext 已恢复');
+            }
+        }
+
+        function playNextLargeAudioChunk() {
+            if (isServerAudioPlaying) {
+                console.debug("[ClientVAD Playback] playNextLarge: 播放器正忙，等待当前块结束。");
+                return;
+            }
+
+            const accumulatedDuration = mainAccumulatedPcmData.length / TARGET_AUDIO_SAMPLE_RATE;
+            // 只有当累积的数据足够一个最小播放块，并且播放器空闲时才开始
+            if (mainAccumulatedPcmData.length === 0 || accumulatedDuration < MIN_PLAYBACK_CHUNK_DURATION_S) {
+                if (mainAccumulatedPcmData.length === 0) {
+                    updateAudioPlaybackStatus("空闲 (主PCM缓冲区为空)");
+                } else {
+                    updateAudioPlaybackStatus(`正在累积PCM以达到最小缓冲... (当前: ${accumulatedDuration.toFixed(2)}s / 需至少: ${MIN_PLAYBACK_CHUNK_DURATION_S}s)`);
+                }
+                updateAccumulatedPcmInfo();
+                return;
+            }
+
+            isServerAudioPlaying = true;
+
+            const samplesForTargetDuration = Math.floor(TARGET_PLAYBACK_CHUNK_DURATION_S * TARGET_AUDIO_SAMPLE_RATE);
+            const samplesToPlay = Math.min(mainAccumulatedPcmData.length, samplesForTargetDuration);
+
+            console.log(`[ClientVAD Playback] 准备播放大块。累积样本: ${mainAccumulatedPcmData.length}, 目标播放样本: ${samplesToPlay}, 目标块时长: ${TARGET_PLAYBACK_CHUNK_DURATION_S}s`);
+
+            const pcmChunkToPlay = mainAccumulatedPcmData.slice(0, samplesToPlay);
+            mainAccumulatedPcmData = mainAccumulatedPcmData.slice(samplesToPlay);
+            updateAccumulatedPcmInfo();
+
+            if (!serverPlaybackAudioContext || pcmChunkToPlay.length === 0) {
+                console.warn("[ClientVAD Playback] AudioContext 未就绪或待播放PCM数据为空。");
+                isServerAudioPlaying = false;
+                if (mainAccumulatedPcmData.length > 0) setTimeout(playNextLargeAudioChunk, 50); // 稍后重试
+                return;
+            }
+
+            console.log(`[ClientVAD Playback DEBUG] 创建大块 AudioBuffer: 声道=1, 长度=${pcmChunkToPlay.length}, 数据采样率=${TARGET_AUDIO_SAMPLE_RATE}`);
+            const audioBufferToPlay = serverPlaybackAudioContext.createBuffer(
+                1,
+                pcmChunkToPlay.length,
+                TARGET_AUDIO_SAMPLE_RATE
+            );
+            try {
+                audioBufferToPlay.getChannelData(0).set(pcmChunkToPlay);
+            } catch (e) {
+                console.error("[ClientVAD Playback] 设置 AudioBuffer 数据时出错:", e, "PCM数据长度:", pcmChunkToPlay.length);
+                isServerAudioPlaying = false;
+                updateAudioPlaybackStatus("错误: 设置Buffer数据失败");
+                if (mainAccumulatedPcmData.length > 0) setTimeout(playNextLargeAudioChunk, 50);
+                return;
+            }
+
+            currentSourceNode = serverPlaybackAudioContext.createBufferSource();
+            currentSourceNode.buffer = audioBufferToPlay;
+            currentSourceNode.connect(serverPlaybackAudioContext.destination);
+
+            currentSourceNode.onended = () => {
+                console.log(`[ClientVAD Playback] 大块 AudioBuffer (时长: ${audioBufferToPlay.duration.toFixed(3)}s) 播放结束。AudioContext当前时间: ${serverPlaybackAudioContext.currentTime.toFixed(3)}`);
+                isServerAudioPlaying = false;
+                currentSourceNode = null;
+                if (nextChunkPlayTime < serverPlaybackAudioContext.currentTime - 0.1) {
+                    console.warn(`[ClientVAD Playback] onended: nextChunkPlayTime (${nextChunkPlayTime.toFixed(3)}) 远落后于 currentTime (${serverPlaybackAudioContext.currentTime.toFixed(3)})。重置 nextChunkPlayTime。`);
+                    nextChunkPlayTime = serverPlaybackAudioContext.currentTime;
+                }
+                playNextLargeAudioChunk();
+            };
+
+            let scheduledPlayTime = nextChunkPlayTime;
+            if (scheduledPlayTime < serverPlaybackAudioContext.currentTime) {
+                scheduledPlayTime = serverPlaybackAudioContext.currentTime + PLAYBACK_START_DELAY_S;
+                console.log(`[ClientVAD Playback] 预定播放时间 (${nextChunkPlayTime.toFixed(3)}s) 已过或太近，调整为 ${scheduledPlayTime.toFixed(3)}s`);
+            }
+
+            console.log(`[ClientVAD Playback] 计划在 ${scheduledPlayTime.toFixed(3)}s 开始播放大块 AudioBuffer (时长: ${audioBufferToPlay.duration.toFixed(3)}s)`);
+            updateAudioPlaybackStatus(`正在播放 (主缓冲区剩余: ${(mainAccumulatedPcmData.length / TARGET_AUDIO_SAMPLE_RATE).toFixed(2)}s)`);
+            try {
+                currentSourceNode.start(scheduledPlayTime);
+                nextChunkPlayTime = scheduledPlayTime + audioBufferToPlay.duration;
+                console.log(`[ClientVAD Playback] 下一个块的预定播放时间更新为: ${nextChunkPlayTime.toFixed(3)}s`);
+            } catch (e) {
+                console.error("[ClientVAD Playback] 调用 sourceNode.start() 失败:", e);
+                isServerAudioPlaying = false;
+                updateAudioPlaybackStatus("错误: 启动播放失败");
+                nextChunkPlayTime = serverPlaybackAudioContext.currentTime;
+                if (mainAccumulatedPcmData.length > 0) setTimeout(playNextLargeAudioChunk, 50);
+            }
+        }
+
+        function createAndDisplayCompleteStreamDownloadLink() {
+            if (accumulatedRawWavBlobs.length === 0) {
+                completeStreamDownloadLinkContainer.innerHTML = '<span>没有累积的音频数据可供下载。</span>';
+                if (audioDebugArea.classList.contains('hidden')) audioDebugArea.classList.remove('hidden');
+                return;
+            }
+            try {
+                const completeBlob = new Blob(accumulatedRawWavBlobs, {type: 'audio/wav'});
+                const url = URL.createObjectURL(completeBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                const fileName = `complete_audio_stream_${clientSessionIdInput.value.substring(0,8)}.wav`;
+                link.download = fileName;
+                link.textContent = `下载完整音频流 (拼接WAV块): ${fileName} (${(completeBlob.size / 1024).toFixed(2)} KB)`;
+                link.className = "block mt-1 mb-1 text-blue-600 hover:text-blue-800 underline";
+
+                completeStreamDownloadLinkContainer.innerHTML = '';
+                completeStreamDownloadLinkContainer.appendChild(link);
+                if (audioDebugArea.classList.contains('hidden')) audioDebugArea.classList.remove('hidden');
+
+                link.onclick = () => {
+                    console.log(`[ClientVAD Debug] 用户点击下载完整音频流: ${fileName}`);
+                    setTimeout(() => {
+                        URL.revokeObjectURL(url);
+                        console.log(`[ClientVAD Debug] 已释放完整流的 Blob URL.`);
+                    }, 300);
+                };
+            } catch (e) {
+                console.error("[ClientVAD Debug] 创建完整流下载链接失败:", e);
+                completeStreamDownloadLinkContainer.textContent = `创建下载链接失败: ${e.message}`;
+                if (audioDebugArea.classList.contains('hidden')) audioDebugArea.classList.remove('hidden');
+            }
+        }
+
+
+        connectButtonVad.onclick = async () => {
             if (websocketVad && websocketVad.readyState === WebSocket.OPEN) {
                 updateStatusVad('已连接，无需重复连接。', 'info');
                 return;
             }
+            await initializeServerPlaybackAudioContext();
             connectWebSocketVad();
         };
 
@@ -257,12 +419,37 @@
             if (websocketVad) {
                 websocketVad.close();
             }
+            if (currentSourceNode) {
+                currentSourceNode.onended = null;
+                try { currentSourceNode.stop(); } catch(e) { console.warn("停止当前音频源时出错:", e); }
+                currentSourceNode = null;
+            }
+            mainAccumulatedPcmData = new Float32Array(0);
+            isServerAudioPlaying = false;
+            nextChunkPlayTime = 0;
+            accumulatedRawWavBlobs = [];
+            updateAccumulatedPcmInfo();
+            updateAudioPlaybackStatus("已停止 (断开连接)");
+            audioDebugArea.classList.add('hidden');
         };
 
         function connectWebSocketVad() {
             const wsUrl = wsUrlInputVad.value;
             updateStatusVad('正在连接...', 'info');
             console.log(`[ClientVAD] 尝试连接到: ${wsUrl}`);
+
+            accumulatedRawWavBlobs = [];
+            mainAccumulatedPcmData = new Float32Array(0);
+            isServerAudioPlaying = false;
+            if (serverPlaybackAudioContext) {
+                nextChunkPlayTime = serverPlaybackAudioContext.currentTime;
+            } else {
+                nextChunkPlayTime = 0;
+            }
+            updateAccumulatedPcmInfo();
+            completeStreamDownloadLinkContainer.innerHTML = '';
+            audioDebugArea.classList.add('hidden');
+
 
             websocketVad = new WebSocket(wsUrl);
             websocketVad.binaryType = "arraybuffer";
@@ -273,33 +460,118 @@
                 connectButtonVad.classList.add('hidden');
                 disconnectButtonVad.classList.remove('hidden');
                 enableControlsOnConnectVad();
+
+                const initMessage = {
+                    type: "init_session",
+                    session_id: clientSessionIdInput.value,
+                    config: { client_type: "web_vad_client_v8_wav_merged_play_optimized" }
+                };
+                websocketVad.send(JSON.stringify(initMessage));
+                console.log(`[ClientVAD] WebSocket 打开，已发送初始化消息: ${JSON.stringify(initMessage)}`);
+                appendServerMessageVad(`已发送会话初始化请求 (ID: ${clientSessionIdInput.value})。`);
+
+                if (serverPlaybackAudioContext) {
+                    nextChunkPlayTime = serverPlaybackAudioContext.currentTime;
+                    console.log(`[ClientVAD Playback] WebSocket连接成功，重置nextChunkPlayTime: ${nextChunkPlayTime.toFixed(3)}s`);
+                }
             };
 
             websocketVad.onmessage = async (event) => {
                 if (event.data instanceof ArrayBuffer) {
-                    updateStatusVad('收到音频数据...', 'info');
-                    console.log('[ClientVAD] 收到 ArrayBuffer 音频数据，长度: ' + event.data.byteLength);
-                    const audioBlob = new Blob([event.data], { type: 'audio/wav' });
-                    const audioUrl = URL.createObjectURL(audioBlob);
-                    audioPlayerVad.src = audioUrl;
-                    audioPlayerVad.play().catch(e => console.error("[ClientVAD] 播放音频失败:", e));
-                    appendServerMessageVad(`收到 ${event.data.byteLength} 字节的音频数据，尝试播放。`);
+                    // updateStatusVad('正在接收并解码WAV音频...', 'info'); // 这条日志可能太频繁，先注释
+                    const receivedArrayBuffer = event.data;
+                    const receivedByteLength = receivedArrayBuffer.byteLength;
+                    console.log(`[ClientVAD] 收到 ArrayBuffer (应为WAV) 音频数据，长度: ${receivedByteLength} 字节`);
+
+                    if (receivedByteLength > 0) {
+                        accumulatedRawWavBlobs.push(new Blob([receivedArrayBuffer.slice(0)], {type: 'audio/wav'}));
+                    }
+
+                    if (!serverPlaybackAudioContext) {
+                        await initializeServerPlaybackAudioContext();
+                        if (!serverPlaybackAudioContext) {
+                             appendServerMessageVad("错误：无法播放收到的音频，音频播放器初始化失败。");
+                             return;
+                        }
+                        nextChunkPlayTime = serverPlaybackAudioContext.currentTime;
+                        console.log(`[ClientVAD Playback] AudioContext 首次初始化，设置 nextChunkPlayTime: ${nextChunkPlayTime.toFixed(3)}s`);
+                    }
+
+                    if (receivedByteLength === 0) { console.log("[ClientVAD] 收到空音频数据块，忽略。"); return; }
+
+                    try {
+                        const dataCopy = receivedArrayBuffer.slice(0);
+                        const decodedAudioBuffer = await serverPlaybackAudioContext.decodeAudioData(dataCopy);
+                        console.log(`[ClientVAD Playback] WAV块解码成功。采样率: ${decodedAudioBuffer.sampleRate}, 时长: ${decodedAudioBuffer.duration.toFixed(3)}s, 声道数: ${decodedAudioBuffer.numberOfChannels}`);
+
+                        if (decodedAudioBuffer.sampleRate !== TARGET_AUDIO_SAMPLE_RATE) {
+                             console.warn(`[ClientVAD Playback] 警告: 解码后的音频采样率 (${decodedAudioBuffer.sampleRate}Hz) 与期望的播放采样率 (${TARGET_AUDIO_SAMPLE_RATE}Hz) 不符。`);
+                        }
+
+                        const pcmData = decodedAudioBuffer.getChannelData(0);
+
+                        const currentAccumulatedDuration = mainAccumulatedPcmData.length / TARGET_AUDIO_SAMPLE_RATE;
+                        if (currentAccumulatedDuration + pcmData.length / TARGET_AUDIO_SAMPLE_RATE > MAX_ACCUMULATED_PCM_DURATION_S) {
+                            console.warn(`[ClientVAD Buffer] 主累积PCM缓冲区将超出最大限制 (${MAX_ACCUMULATED_PCM_DURATION_S}s)。`);
+                            const requiredSamplesForMax = Math.floor(MAX_ACCUMULATED_PCM_DURATION_S * TARGET_AUDIO_SAMPLE_RATE);
+                            const samplesToKeepFromOld = Math.max(0, requiredSamplesForMax - pcmData.length);
+                            if (samplesToKeepFromOld < mainAccumulatedPcmData.length) {
+                                console.log(`[ClientVAD Buffer] 截断旧的PCM数据以腾出空间。保留旧数据样本数: ${samplesToKeepFromOld}`);
+                                mainAccumulatedPcmData = mainAccumulatedPcmData.slice(mainAccumulatedPcmData.length - samplesToKeepFromOld);
+                            } else if (pcmData.length > requiredSamplesForMax) {
+                                mainAccumulatedPcmData = pcmData.slice(pcmData.length - requiredSamplesForMax);
+                                console.log(`[ClientVAD Buffer] 新PCM块过大，截断新块。`);
+                            }
+                        }
+
+                        const newAccumulatedPcmData = new Float32Array(mainAccumulatedPcmData.length + pcmData.length);
+                        newAccumulatedPcmData.set(mainAccumulatedPcmData);
+                        newAccumulatedPcmData.set(pcmData, mainAccumulatedPcmData.length);
+                        mainAccumulatedPcmData = newAccumulatedPcmData;
+                        updateAccumulatedPcmInfo();
+
+                        playNextLargeAudioChunk();
+                    } catch (e) {
+                        const errMsg = `错误：解码服务器发送的WAV数据失败 - ${e.message}`;
+                        console.error("[ClientVAD Playback] " + errMsg, e);
+                        appendServerMessageVad(errMsg);
+                        updateStatusVad('WAV数据解码错误', 'error');
+                    }
 
                 } else if (typeof event.data === 'string') {
                     console.log(`[ClientVAD] 收到文本消息: ${event.data}`);
                     try {
                         const jsonData = JSON.parse(event.data);
-                        if (jsonData.type === "text_response") {
-                            appendServerMessageVad(`服务器回复: ${jsonData.content}`);
+                        if (jsonData.type === "session_established") {
+                            updateStatusVad(`会话已建立 (ID: ${jsonData.session_id})`, 'success');
+                            appendServerMessageVad(`服务器确认会话: ${jsonData.session_id} - ${jsonData.message}`);
+                        } else if (jsonData.type === "text_response") {
+                            appendServerMessageVad(`服务器: ${jsonData.content}`);
                         } else if (jsonData.type === "audio_stream_end") {
-                            updateStatusVad(jsonData.message || '音频流结束', 'info');
+                            updateStatusVad(jsonData.message || '音频流结束', 'success');
                             appendServerMessageVad(`服务器: ${jsonData.message || '音频流结束'}`);
+
+                            if (accumulatedRawWavBlobs.length > 0) {
+                                createAndDisplayCompleteStreamDownloadLink();
+                            } else {
+                                console.log("[ClientVAD] 音频流结束，但没有累积的WAV数据可供下载。");
+                                completeStreamDownloadLinkContainer.innerHTML = '<span>没有可下载的音频数据。</span>';
+                                if (audioDebugArea.classList.contains('hidden')) audioDebugArea.classList.remove('hidden');
+                            }
+                            // accumulatedRawWavBlobs = []; // 清理，为下一个流做准备
+
+                            if (mainAccumulatedPcmData.length > 0 && !isServerAudioPlaying) {
+                                console.log("[ClientVAD Playback] 收到 audio_stream_end，尝试播放主累积缓冲区中剩余音频。");
+                                playNextLargeAudioChunk();
+                            } else if (mainAccumulatedPcmData.length === 0 && !isServerAudioPlaying) {
+                                updateAudioPlaybackStatus("空闲 (流结束)");
+                            }
                         } else if (jsonData.type === "error") {
                             updateStatusVad(`服务器错误: ${jsonData.message}`, 'error');
                             appendServerMessageVad(`服务器错误: ${jsonData.message}`);
                         } else if (jsonData.type === "info") {
-                            updateStatusVad(`服务器信息: ${jsonData.content}`, 'info');
-                            appendServerMessageVad(`服务器信息: ${jsonData.content}`);
+                            updateStatusVad(`服务器信息: ${jsonData.content || jsonData.message}`, 'info');
+                            appendServerMessageVad(`服务器信息: ${jsonData.content || jsonData.message}`);
                         } else {
                              appendServerMessageVad(`服务器原始JSON: ${event.data}`);
                         }
@@ -322,7 +594,20 @@
                 appendServerMessageVad(`与服务器断开连接。代码: ${event.code}`);
                 websocketVad = null;
                 disableControlsOnDisconnectVad();
-                stopRecordingVad(false); // 传入 false 表示不是用户主动停止，不需要发结束信号
+                stopRecordingVad(false);
+
+                if (currentSourceNode) {
+                    currentSourceNode.onended = null;
+                    try { currentSourceNode.stop(); } catch(e) { console.warn("停止当前音频源时出错:", e); }
+                    currentSourceNode = null;
+                }
+                mainAccumulatedPcmData = new Float32Array(0);
+                isServerAudioPlaying = false;
+                nextChunkPlayTime = 0;
+                accumulatedRawWavBlobs = [];
+                updateAccumulatedPcmInfo();
+                updateAudioPlaybackStatus("已停止 (连接关闭)");
+                audioDebugArea.classList.add('hidden');
             };
         }
 
@@ -344,11 +629,11 @@
             if (websocketVad && websocketVad.readyState === WebSocket.OPEN) {
                 const text = textInputVad.value;
                 if (text.trim()) {
-                    const message = JSON.stringify({type: "text_message", content: text});
+                    const message = JSON.stringify({type: "text_input_from_client", content: text});
                     websocketVad.send(message);
                     updateStatusVad(`已发送文本: "${text.substring(0,30)}..."`, 'info');
                     appendServerMessageVad(`我: ${text}`);
-                    console.log(`[ClientVAD] 已发送 (text_message): ${message}`);
+                    console.log(`[ClientVAD] 已发送: ${message}`);
                 } else {
                     updateStatusVad('发送的文本不能为空', 'error');
                 }
@@ -363,40 +648,38 @@
                 return;
             }
             try {
-                if (!audioContextVad) {
-                     audioContextVad = new (window.AudioContext || window.webkitAudioContext)();
-                     console.log(`[ClientVAD Mic] AudioContext已初始化，原始采样率: ${audioContextVad.sampleRate}`);
+                if (!micAudioContext) {
+                     micAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+                     console.log(`[ClientVAD Mic] 麦克风 AudioContext已初始化，原始采样率: ${micAudioContext.sampleRate}`);
                 }
-                if (audioContextVad.state === 'suspended') {
-                    await audioContextVad.resume();
-                }
+                if (micAudioContext.state === 'suspended') { await micAudioContext.resume(); }
 
                 mediaStreamVad = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
 
-                const actualInputSampleRate = audioContextVad.sampleRate;
-                console.log(`[ClientVAD Mic] 麦克风已获取。AudioContext 采样率: ${actualInputSampleRate}Hz (将重采样到 ${TARGET_SAMPLE_RATE_VAD}Hz)`);
+                const actualInputSampleRate = micAudioContext.sampleRate;
+                console.log(`[ClientVAD Mic] 麦克风已获取。AudioContext 采样率: ${actualInputSampleRate}Hz (将重采样到 ${TARGET_AUDIO_SAMPLE_RATE}Hz)`);
                 updateStatusVad('麦克风已授权，正在录音 (VAD激活时发送)...', 'success');
                 appendServerMessageVad('开始录音，VAD将控制音频发送...');
                 startRecordButtonVad.classList.add('hidden');
                 stopRecordButtonVad.classList.remove('hidden');
-                updateVadStateDisplay(false); // 初始为静默
+                updateVadStateDisplay(false);
 
                 const audioWorkletBlob = new Blob([audioProcessorCodeVad], { type: 'application/javascript' });
                 const audioWorkletUrl = URL.createObjectURL(audioWorkletBlob);
 
-                await audioContextVad.audioWorklet.addModule(audioWorkletUrl);
+                await micAudioContext.audioWorklet.addModule(audioWorkletUrl);
                 console.log('[ClientVAD AudioWorklet] 模块已添加。');
 
-                const microphoneSource = audioContextVad.createMediaStreamSource(mediaStreamVad);
-                audioWorkletNodeVad = new AudioWorkletNode(audioContextVad, audioProcessorNameVad, {
+                const microphoneSource = micAudioContext.createMediaStreamSource(mediaStreamVad);
+                audioWorkletNodeVad = new AudioWorkletNode(micAudioContext, audioProcessorNameVad, {
                     processorOptions: {
                         inputSampleRate: actualInputSampleRate,
-                        outputSampleRate: TARGET_SAMPLE_RATE_VAD,
+                        outputSampleRate: TARGET_AUDIO_SAMPLE_RATE,
                         sendBufferSizeSamples: SEND_BUFFER_SIZE_SAMPLES,
-                        vadThreshold: 0.01, // VAD 能量阈值，可调整
-                        vadSilenceFramesThreshold: 15, // 约 15 * (128/16000)s = 120ms 静音判断结束
-                        vadSpeechFramesMin: 3,      // 约 3 * (128/16000)s = 24ms 语音判断开始
-                        vadSpeechPaddingFrames: 8   // 约 8 * (128/16000)s = 64ms 拖尾
+                        vadThreshold: 0.01,
+                        vadSilenceFramesThreshold: 15,
+                        vadSpeechFramesMin: 3,
+                        vadSpeechPaddingFrames: 8
                     }
                 });
 
@@ -409,7 +692,6 @@
                         }
                         if (websocketVad && websocketVad.readyState === WebSocket.OPEN) {
                             websocketVad.send(pcmInt16.buffer);
-                            // console.debug(`[ClientVAD WebSocket] 已发送VAD检测到的音频数据块，长度: ${pcmInt16.buffer.byteLength} bytes`);
                         }
                     } else if (event.data.type === 'vad_state') {
                         updateVadStateDisplay(event.data.speaking);
@@ -417,10 +699,9 @@
                     }
                 };
                 microphoneSource.connect(audioWorkletNodeVad);
-                // audioWorkletNodeVad.connect(audioContextVad.destination); // 通常不需要连接到输出
 
             } catch (err) {
-                console.error('[ClientVAD Mic] 麦克风访问或AudioWorklet设置失败:', err);
+                console.error('[ClientVAD Mic] 麦克风访问或AudioWorklet设定失败:', err);
                 updateStatusVad(`麦克风错误: ${err.name} - ${err.message}`, 'error');
                 appendServerMessageVad(`麦克风错误: ${err.message}`);
                 stopRecordingVad(false);
@@ -428,7 +709,7 @@
         };
 
         stopRecordButtonVad.onclick = () => {
-            stopRecordingVad(true); // 用户主动停止，发送结束信号
+            stopRecordingVad(true);
             updateStatusVad('录音已停止', 'info');
             appendServerMessageVad('录音已停止。');
         };
@@ -441,15 +722,14 @@
                 console.log('[ClientVAD Mic] MediaStream轨道已停止。');
             }
             if (audioWorkletNodeVad) {
-                audioWorkletNodeVad.port.postMessage('stop'); // 通知 processor 停止并刷新
-                // 稍作延迟，给 processor 一点时间处理 stop 和刷新
+                audioWorkletNodeVad.port.postMessage('stop');
                 setTimeout(() => {
-                    if (audioWorkletNodeVad) { // 再次检查，因为它可能在延迟期间被置为 null
+                    if (audioWorkletNodeVad) {
                        audioWorkletNodeVad.disconnect();
                        audioWorkletNodeVad = null;
                        console.log('[ClientVAD AudioWorklet] Node已断开连接。');
                     }
-                }, 100); // 100ms 延迟，可以根据实际情况调整
+                }, 100);
             }
 
             startRecordButtonVad.classList.remove('hidden');
@@ -457,7 +737,7 @@
             updateVadStateDisplay(false);
 
             if (sendEndSignal && websocketVad && websocketVad.readyState === WebSocket.OPEN) {
-                const message = JSON.stringify({type: "audio_stream_end_signal"}); // 与服务器约定好的结束信号
+                const message = JSON.stringify({type: "audio_stream_end_signal"});
                 websocketVad.send(message);
                 console.log(`[ClientVAD] 已发送 (audio_stream_end_signal): ${message}`);
             }

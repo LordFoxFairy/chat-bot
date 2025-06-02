@@ -4,8 +4,8 @@ from typing import Type, Optional, Dict, Any
 # 核心框架组件的导入
 # from core_framework.session_manager import SessionManager # WebsocketInputHandler 不再直接依赖
 # from core_framework.event_manager import EventManager # WebsocketInputHandler 不再直接依赖
-from core_framework.chat_engine import ChatEngine  # WebsocketInputHandler 现在依赖 ChatEngine
-from core_framework.exceptions import ConfigurationError
+from core.chat_engine import ChatEngine  # WebsocketInputHandler 现在依赖 ChatEngine
+from core.exceptions import ConfigurationError
 
 # 输入处理器基类和具体实现的导入
 from .base_input_handler import BaseInputHandler

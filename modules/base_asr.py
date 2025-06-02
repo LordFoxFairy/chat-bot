@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, AsyncGenerator, TYPE_CHECKING, List
 
 import numpy as np
 
-from core_framework.exceptions import ModuleProcessingError  # 確保導入 ModuleProcessingError
+from core.exceptions import ModuleProcessingError  # 確保導入 ModuleProcessingError
 # 假設 BaseModule 從您的項目路徑導入
 from modules.base_module import BaseModule
 # 導入框架定義的核心數據模型
@@ -13,7 +13,7 @@ from data_models import AudioData, TextData, AudioFormat
 from utils.audio_converter import convert_to_target_format  # 確保路徑正確
 
 if TYPE_CHECKING:
-    from core_framework.event_manager import EventManager
+    from core.event_manager import EventManager
 
 # 日誌記錄器
 import logging

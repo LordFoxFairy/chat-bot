@@ -11,7 +11,7 @@ from data_models.text_data import TextData
 from modules.base_module import BaseModule  # 確保這是 BasePipelineModule 或其父類
 
 if TYPE_CHECKING:
-    from core_framework.event_manager import EventManager
+    from core.event_manager import EventManager
 
 logger = logging.getLogger(__name__)
 

@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any
 import numpy as np
 
 # 框架核心組件的相對路徑導入
-from core_framework.exceptions import ModuleInitializationError, ModuleProcessingError
+from core.exceptions import ModuleInitializationError, ModuleProcessingError
 # 導入框架定義的核心數據模型
 # 導入重構後的 ASR 基類
 from modules.base_asr import BaseASR  # 確保路徑正確

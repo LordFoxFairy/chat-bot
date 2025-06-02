@@ -22,7 +22,7 @@ except ImportError:  # pragma: no cover
 
 # from langchain_anthropic import ChatAnthropic # 示例，如果需要支持
 
-from core_framework.exceptions import ModuleInitializationError, ModuleProcessingError
+from core.exceptions import ModuleInitializationError, ModuleProcessingError
 from modules.base_llm import BaseLLM  # 继承自重构后的 BaseLLM
 
 # from data_models.text_data import TextData # 虽然不直接用，但保持上下文一致性

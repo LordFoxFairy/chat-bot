@@ -2,7 +2,7 @@ import asyncio
 from typing import Type, Optional, Dict, Any
 
 from modules.base_llm import BaseLLM #
-from core_framework.exceptions import ModuleInitializationError #
+from core.exceptions import ModuleInitializationError #
 # LLM 适配器
 from .langchain_llm_adapter import LangchainLLMAdapter #
 

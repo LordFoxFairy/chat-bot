@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 from data_models.text_data import TextData
 from services.config_loader import ConfigLoader
 from adapters.llm.langchain_llm_adapter import LangchainLLMAdapter
-from core_framework.session_manager import SessionManager
-from core_framework.exceptions import ModuleInitializationError, ModuleProcessingError
+from core.session_manager import SessionManager
+from core.exceptions import ModuleInitializationError, ModuleProcessingError
 
 
 # EventManager 可以為 None，如果適配器不直接依賴它發送特定事件

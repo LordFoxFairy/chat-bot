@@ -7,12 +7,12 @@ from adapters.asr.asr_factory import create_asr_adapter
 from adapters.llm.llm_factory import create_llm_adapter
 from adapters.tts.tts_factory import create_tts_adapter
 from adapters.vad.vad_factory import create_vad_adapter
-from core_framework.exceptions import ModuleInitializationError
+from core.exceptions import ModuleInitializationError
 from modules.base_module import BaseModule
 from services.config_loader import ConfigLoader
 
 if TYPE_CHECKING:
-    from core_framework.event_manager import EventManager
+    from core.event_manager import EventManager
 
 logger = logging.getLogger(__name__)  # 获取当前模块的 logger 实例
 

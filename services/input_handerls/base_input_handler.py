@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 
-from core_framework.event_manager import EventManager
-from core_framework.session_manager import SessionManager
+from core.event_manager import EventManager
+from core.session_manager import SessionManager
 
 
 class BaseInputHandler(ABC):

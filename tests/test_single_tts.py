@@ -12,7 +12,7 @@ from typing import Dict, Any, Optional
 from data_models.text_data import TextData
 # from data_models.audio_data import AudioData # 主要用於類型提示，測試依賴 BaseTTS 保存
 from adapters.tts.edge_tts_adapter import EdgeTTSAdapter
-from core_framework.exceptions import ModuleInitializationError  # 假設的異常
+from core.exceptions import ModuleInitializationError  # 假設的異常
 from services.config_loader import ConfigLoader
 
 # 配置日誌記錄

@@ -8,8 +8,8 @@ import logging # 切换到标准 logging
 from data_models.text_data import TextData
 from data_models.stream_event import StreamEvent, EventType
 from modules.base_module import BaseModule
-from core_framework.session_manager import SessionManager
-from core_framework.exceptions import ModuleInitializationError, ModuleProcessingError
+from core.session_manager import SessionManager
+from core.exceptions import ModuleInitializationError, ModuleProcessingError
 from langchain_core.messages import AIMessage, BaseMessage
 
 logger = logging.getLogger(__name__)
@@ -79,10 +79,6 @@ class BaseLLM(BaseModule):
         主要检查基本配置是否齐全，具体的LLM客户端初始化由适配器子类完成。
         适配器子类在其 initialize 方法中应在成功时设置 self._is_ready = True。
         """
-        # BaseModule.initialize() 通常是pass, 但如果它有逻辑，应该调用
-        # await super().initialize() # 如果 BaseModule 有异步 initialize
-        super().initialize() # 如果 BaseModule 的 initialize 是同步的
-
         if not self.enabled_provider_name: # pragma: no cover
             msg = f"BaseLLM [{self.module_id}]: 初始化失败，因为配置中缺少 'enable_module' 来指定LLM提供商。"
             logger.error(msg)
@@ -92,10 +88,8 @@ class BaseLLM(BaseModule):
             return
 
         # BaseLLM 本身不做太多初始化，主要依赖适配器
-        # _is_initialized 标记配置已读取, _is_ready 由适配器在成功连接LLM后设置
         self._is_initialized = True # 标记基础配置已读取
         logger.debug(f"BaseLLM [{self.module_id}] 基础初始化完成。最终就绪状态取决于适配器。")
-        # self._is_ready 将由具体的适配器子类在其initialize方法中设置为True
 
     @abstractmethod
     def _prepare_llm_messages(self, user_prompt: str, dialogue_history: List[Dict[str, Any]]) -> List[BaseMessage]:
@@ -247,7 +241,7 @@ class BaseLLM(BaseModule):
                 session_id=session_id, # StreamEvent 也携带 session_id
                 metadata={"description": f"LLM module '{self.module_id}' processing error: {error}"} # StreamEvent 的元数据
             )
-            await self.event_manager.publish(error_event)
+            await self.event_manager.post_event(error_event)
 
 
     async def generate_complete_response(self, input_data: TextData, session_id: Optional[str] = None) -> Optional[TextData]:

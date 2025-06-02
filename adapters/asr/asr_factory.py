@@ -6,7 +6,7 @@ from .funasr_sensevoice_adapter import FunASRSenseVoiceAdapter
 
 # 导入 BaseASR 用于类型提示
 from modules.base_asr import BaseASR  #
-from core_framework.exceptions import ModuleInitializationError
+from core.exceptions import ModuleInitializationError
 
 # 如果 EventManager 和 SessionManager 类型提示需要，可以导入
 # from ...core_framework.event_manager import EventManager

@@ -1,5 +1,3 @@
-# config.yaml
-
 modules:
   asr: # 自动语音识别 (ASR) 模块
     enabled: true # 是否启用此模块
@@ -49,39 +47,48 @@ modules:
   tts: # 文本轉語音 (TTS) 模塊的頂層配置
     enabled: true               # 是否啟用此 TTS 模塊
     module_category: "tts"      # 模塊類別，用於工廠模式
-    adapter_type: "edge_tts"    # 指定要使用的 TTS 適配器類型 (例如 "edge_tts", "openai_tts")
-                                # 這將被 BaseTTS 用來查找下面的特定配置塊
-                                # 也可使用 "enable_module": "edge_tts"
-    save_generated_audio: true # 示例：是否保存生成的音頻文件 (此功能需在適配器中實現)
-    audio_save_path: "tmp" # 示例：如果保存，音頻文件的保存路徑
-    config: # 包含所有 TTS 適配器特定配置的容器
-      # --- EdgeTTS 適配器的特定配置 ---
+    adapter_type: "edge_tts"    # 指定要使用的 TTS 適配器類型
+    save_generated_audio: true
+    audio_save_path: "outputs/tts_audio/"
+    config:
       edge_tts:
-        # BaseTTS 會從這裡讀取通用 TTS 參數 (如果存在且鍵名匹配)
-        # 也會從這裡讀取 EdgeTTS 特定的參數
-
-        # EdgeTTS 特定的核心參數
-        voice: "zh-CN-XiaoxiaoNeural" # EdgeTTS 使用的語音角色/模型名稱
-        rate: "+0%"                   # 語速調整，例如 "+10%", "-5%" (可選，默認為 "+0%")
-        volume: "+0%"                 # 音量調整，例如 "+20%", "-10%" (可選，默認為 "+0%")
-        # pitch: "+0Hz"               # 音調調整 (可選，EdgeTTS 支持)
-
-        # BaseTTS 會查找的通用輸出格式相關參數 (如果適配器 YAML 中定義了這些，則優先使用)
-        output_audio_format: "wav"      # TTS 最終輸出的音頻格式 ("wav", "opus", "mp3", "pcm")
-                                        # EdgeTTS 原生支持 mp3, opus 等，如果請求 pcm 或 wav，則需要轉換
+        voice: "zh-CN-XiaoxiaoNeural"
+        rate: "+0%"
+        volume: "+0%"
+        output_audio_format: "wav"
         sample_rate: 16000
+
+  vad: # 语音活动检测 (VAD) 模块
+    enabled: true # 是否启用此模块
+    module_category: "vad" # 模块类别
+    adapter_type: "silero_vad" # 指定VAD适配器类型
+    config: # VAD 模块的特定配置
+      silero_vad: # 与 adapter_type 匹配
+        model_repo_path: "snakers4/silero-vad" # Silero VAD 模型仓库路径或本地路径
+        model_name: "silero_vad" # 模型名称
+        threshold: 0.5 # 语音检测阈值
+        vad_sample_rate: 16000 # VAD期望的采样率
+        min_silence_duration_ms: 100 # 最小静默持续时间 (ms)
+        speech_pad_ms: 30 # 语音段两端的填充时间 (ms)
+        device: "cpu" # "cpu" 或 "cuda"
+        # force_reload_model: false # 是否强制重新加载模型
+        # trust_repo_for_local: true # 如果 model_repo_path 是本地路径，是否信任它
 
 # --- 全局应用设置 ---
 global_settings:
   log_level: "INFO" # 应用的全局日志级别 ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
-# --- 输入处理器配置 (例如 WebSocket 服务器) ---
-# 注意: 此部分的结构和加载方式取决于您的 app_ws_server.py 如何设计。
-# 以下是一个示例结构，您可能需要根据实际情况调整。
-# 'app_ws_server.py' 在其 __init__ 中通过 self.config 直接访问这些顶级键。
-websocket_server: # WebSocket 服务器的特定配置
-  host: "0.0.0.0" # 监听的主机地址
-  port: 8765      # 监听的端口号
-  websocket_max_message_size: 1048576 # WebSocket 消息的最大大小 (字节, 例如 1MB)
-  # default_pipeline_name: "text_chat_pipeline" # 可选: 如果没有指定流水线，则使用的默认流水线
-                                              # (但这通常由 WebsocketInputHandler 或 ChatEngine 层面处理)
+# --- 提示词激活功能设置 ---
+activation_settings:
+  enable_prompt_activation: true # 开关：是否启用提示词激活功能
+  activation_keywords: ["你好小助手", "启动对话", "你好小爱", "你好助手"] # 激活关键词列表
+  activation_timeout_seconds: 30 # 激活后，无交互的超时时间 (秒)
+  activation_reply: "你好！很高兴为您服务，请问有什么可以帮您的吗？" # 成功激活后的回复
+  deactivation_reply: "再见，本次服务结束，期待下次能继续帮助您。" # 超时或明确指令导致失活时的回复
+  prompt_if_not_activated: "请输入激活指令开始对话，例如“你好小助手”。" # (可选) 当未激活时收到非激活指令的提示
+
+# --- WebSocket 服务器配置 ---
+websocket_server:
+  host: "0.0.0.0"
+  port: 8765
+  websocket_max_message_size: 2097152 # WebSocket 消息的最大大小 (字节, 例如 2MB，以容纳更大的音频块)

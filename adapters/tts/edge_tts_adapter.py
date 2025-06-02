@@ -4,7 +4,7 @@ import logging
 import uuid
 from typing import AsyncGenerator, Optional, Dict, Any
 
-from core_framework.exceptions import ModuleInitializationError  # 假設的異常類
+from core.exceptions import ModuleInitializationError  # 假設的異常類
 from data_models.audio_data import AudioData, AudioFormat
 from data_models.text_data import TextData
 from modules.base_tts import BaseTTS  # 導入修正後的 BaseTTS

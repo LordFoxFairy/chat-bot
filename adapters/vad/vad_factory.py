@@ -2,7 +2,7 @@ import asyncio
 from typing import Type, Optional, Dict, Any
 
 from modules.base_vad import BaseVAD
-from core_framework.exceptions import ModuleInitializationError
+from core.exceptions import ModuleInitializationError
 
 # VAD适配器
 from .silero_vad_adapter import SileroVADAdapter

@@ -1,6 +1,6 @@
 import yaml
 from typing import Dict, Any
-from core_framework.exceptions import ConfigurationError
+from core.exceptions import ConfigurationError
 
 class ConfigLoader:
     @staticmethod

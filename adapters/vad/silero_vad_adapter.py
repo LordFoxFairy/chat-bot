@@ -12,7 +12,7 @@ import os
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core_framework.event_manager import EventManager
+    from core.event_manager import EventManager
 
 logger = logging.getLogger(__name__)
 

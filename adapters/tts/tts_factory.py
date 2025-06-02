@@ -3,7 +3,7 @@ import asyncio
 
 # 导入 BaseTTS 用于类型提示
 from modules.base_tts import BaseTTS #
-from core_framework.exceptions import ModuleInitializationError
+from core.exceptions import ModuleInitializationError
 from .edge_tts_adapter import EdgeTTSAdapter
 
 TTS_ADAPTER_REGISTRY: Dict[str, Type[BaseTTS]] = {

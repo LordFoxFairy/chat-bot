@@ -1,4 +1,3 @@
-# services/input_handerls/websocket_input_handler.py
 import json
 import logging
 import base64
@@ -9,7 +8,7 @@ from data_models.text_data import TextData
 
 # 使用TYPE_CHECKING来避免循环导入，仅用于类型提示
 if TYPE_CHECKING:
-    from core_framework.chat_engine import ChatEngine  # 引用重构后的 ChatEngine
+    from core.chat_engine import ChatEngine  # 引用重构后的 ChatEngine
 
 logger = logging.getLogger(__name__)
 

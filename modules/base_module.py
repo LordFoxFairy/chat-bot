@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core_framework.event_manager import EventManager  # 用於類型提示，避免循環導入
+    from core.event_manager import EventManager  # 用於類型提示，避免循環導入
 
 
 class BaseModule(ABC):
