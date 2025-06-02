@@ -58,21 +58,22 @@ modules:
         output_audio_format: "wav"
         sample_rate: 16000
 
+
   vad: # 语音活动检测 (VAD) 模块
-    enabled: true # 是否启用此模块
-    module_category: "vad" # 模块类别
-    adapter_type: "silero_vad" # 指定VAD适配器类型
-    config: # VAD 模块的特定配置
-      silero_vad: # 与 adapter_type 匹配
-        model_repo_path: "snakers4/silero-vad" # Silero VAD 模型仓库路径或本地路径
-        model_name: "silero_vad" # 模型名称
-        threshold: 0.5 # 语音检测阈值
-        vad_sample_rate: 16000 # VAD期望的采样率
-        min_silence_duration_ms: 100 # 最小静默持续时间 (ms)
-        speech_pad_ms: 30 # 语音段两端的填充时间 (ms)
-        device: "cpu" # "cpu" 或 "cuda"
-        # force_reload_model: false # 是否强制重新加载模型
-        # trust_repo_for_local: true # 如果 model_repo_path 是本地路径，是否信任它
+    enabled: true
+    module_category: "vad"
+    adapter_type: "silero_vad"
+    config:
+      silero_vad:
+        model_repo_path: "models/vad/snakers4/silero-vad"
+        model_name: "silero_vad"
+        threshold: 0.5
+        vad_sample_rate: 16000
+        # min_silence_duration_ms: 100 # 这个是VAD内部参数，ChatEngine用下面那个
+        min_silence_duration_ms_eos: 1200 # ChatEngine判断语句结束的静默阈值 (ms)
+        max_speech_segment_duration_ms: 5000 # 新增：最长语音段持续时间 (ms)，超过则强制ASR
+        window_size_samples: 512 # VAD处理窗口大小（样本数），例如 Silero VAD 16kHz下是512
+        device: "cpu"
 
 # --- 全局应用设置 ---
 global_settings:

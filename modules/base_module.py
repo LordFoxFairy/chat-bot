@@ -29,8 +29,8 @@ class BaseModule(ABC):
         self.event_loop: asyncio.AbstractEventLoop = event_loop if event_loop is not None else asyncio.get_event_loop()
         self.event_manager: Optional['EventManager'] = event_manager
 
-        self._is_initialized: bool = False
-        self._is_ready: bool = False
+        self._is_initialized: bool = True
+        self._is_ready: bool = True
 
 
     @abstractmethod

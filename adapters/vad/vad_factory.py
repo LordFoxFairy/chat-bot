@@ -20,14 +20,13 @@ VAD_ADAPTER_REGISTRY: Dict[str, Type[BaseVAD]] = {
 
 
 def create_vad_adapter(
-        adapter_type: str,
         module_id: str,
         config: Optional[Dict[str, Any]] = None,
         event_loop: Optional[asyncio.AbstractEventLoop] = None,
         event_manager: Optional[Any] = None  # 使用 Any 以避免循环导入
 ) -> BaseVAD:
     """
-    根据指定的 adapter_type 创建并返回一个VAD适配器实例。
+    根据指定的 module_id 创建并返回一个VAD适配器实例。
 
     参数:
         module_id (str): 要分配给模块实例的ID。
