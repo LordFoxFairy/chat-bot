@@ -1,5 +1,5 @@
 import asyncio
-import logging
+from utils.logging_setup import logger
 import os
 import sys
 import time
@@ -7,7 +7,7 @@ from typing import AsyncGenerator, Optional, List  # List 用於收集結果
 
 # --- 基礎日誌配置 ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+
 
 # --- 路徑設置 ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -18,7 +18,7 @@ logger.info(f"項目根目錄 '{PROJECT_ROOT}' 已添加到sys.path。")
 
 # --- 核心框架组件导入 ---
 from data_models import AudioData, TextData, AudioFormat
-from services.config_loader import ConfigLoader
+from utils.config_loader import ConfigLoader
 from modules.base_asr import BaseASR  # 用於類型提示
 # 直接導入要測試的適配器
 from adapters.asr.funasr_sensevoice_adapter import FunASRSenseVoiceAdapter

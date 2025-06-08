@@ -1,12 +1,12 @@
 import asyncio
-import logging
+from utils.logging_setup import logger
 from abc import abstractmethod
 from typing import Optional, Dict, Any
 
 from data_models.audio_data import AudioData
 from modules.base_module import BaseModule
 
-logger = logging.getLogger(__name__)
+
 
 
 class BaseVAD(BaseModule):
@@ -17,8 +17,7 @@ class BaseVAD(BaseModule):
 
     def __init__(self, module_id: str,
                  config: Optional[Dict[str, Any]] = None,
-                 event_loop: Optional[asyncio.AbstractEventLoop] = None,
-                 **kwargs):
+                 event_loop: Optional[asyncio.AbstractEventLoop] = None):
         super().__init__(
             module_id=module_id,
             config=config,

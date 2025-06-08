@@ -1,9 +1,6 @@
 import asyncio
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from core.event_manager import EventManager  # 用於類型提示，避免循環導入
+from typing import Optional, Dict, Any
 
 
 class BaseModule(ABC):
@@ -13,8 +10,7 @@ class BaseModule(ABC):
     """
 
     def __init__(self, module_id: str, config: Optional[Dict[str, Any]] = None,
-                 event_loop: Optional[asyncio.AbstractEventLoop] = None,
-                 event_manager: Optional['EventManager'] = None):
+                 event_loop: Optional[asyncio.AbstractEventLoop] = None):
         """
         初始化 BaseModule。
 
@@ -22,16 +18,13 @@ class BaseModule(ABC):
             module_id (str): 模塊的唯一標識符。
             config (Optional[Dict[str, Any]]): 模塊的配置字典。
             event_loop (Optional[asyncio.AbstractEventLoop]): 事件循環。
-            event_manager (Optional['EventManager']): 事件管理器。
         """
         self.module_id = module_id
         self.config: Dict[str, Any] = config if config is not None else {}
         self.event_loop: asyncio.AbstractEventLoop = event_loop if event_loop is not None else asyncio.get_event_loop()
-        self.event_manager: Optional['EventManager'] = event_manager
 
         self._is_initialized: bool = True
         self._is_ready: bool = True
-
 
     @abstractmethod
     async def initialize(self):
@@ -53,7 +46,7 @@ class BaseModule(ABC):
         # logger.info(f"模塊 {self.module_id} 已啟動。")
         pass
 
-    async def stop(self):
+    async def close(self):
         """
         停止模塊並釋放資源（可選）。
         """

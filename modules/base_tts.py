@@ -1,19 +1,13 @@
-# chat-bot/modules/base_tts.py
 import asyncio
-import logging
 import os
 import uuid
 from abc import abstractmethod
-from typing import AsyncGenerator, Optional, Dict, Any, TYPE_CHECKING, Union  # 新增 Union
+from typing import AsyncGenerator, Optional, Dict, Any, Union  # 新增 Union
 
 from data_models.audio_data import AudioData, AudioFormat
 from data_models.text_data import TextData
-from modules.base_module import BaseModule  # 確保這是 BasePipelineModule 或其父類
-
-if TYPE_CHECKING:
-    from core.event_manager import EventManager
-
-logger = logging.getLogger(__name__)
+from modules.base_module import BaseModule
+from utils.logging_setup import logger
 
 
 # AudioConverter 相關代碼已移除
@@ -28,18 +22,17 @@ class BaseTTS(BaseModule):  # 假設 BaseModule 是正確的基類
     def __init__(self, module_id: str,
                  module_name: Optional[str] = None,
                  config: Optional[Dict[str, Any]] = None,
-                 event_loop: Optional[asyncio.AbstractEventLoop] = None,
-                 event_manager: Optional['EventManager'] = None):
+                 event_loop: Optional[asyncio.AbstractEventLoop] = None, ):
 
-        super().__init__(module_id, config, event_loop, event_manager)  # 修正了 module_name 的傳遞
+        super().__init__(module_id, config, event_loop)  # 修正了 module_name 的傳遞
 
         # 優先使用 'enable_module'，如果不存在則嘗試 'adapter_type'
         # 如果 YAML 中 'adapter_type' 在頂層，而 'enable_module' 在 'config' 內部，這裡的邏輯可能需要調整
         # 根據之前的上下文，'adapter_type' 似乎是頂層的，而 'enable_module' 可能不存在或與 adapter_type 相同
         self.enabled_adapter_name: Optional[str] = self.config.get("adapter_type", self.config.get("enable_module"))
         # 通用輸出設置僅保留與保存相關的配置
-        self.save_generated_audio: bool = self.config.get('save_generated_audio',False)
-        self.audio_save_path: str = self.config.get('audio_save_path',"outputs/tts_audio/")
+        self.save_generated_audio: bool = self.config.get('save_generated_audio', False)
+        self.audio_save_path: str = self.config.get('audio_save_path', "outputs/tts_audio/")
 
         self.adapter_specific_config: Dict[str, Any] = {}
         if self.enabled_adapter_name:
@@ -67,8 +60,6 @@ class BaseTTS(BaseModule):  # 假設 BaseModule 是正確的基類
             logger.warning(f"TTS 模塊 [{self.module_id}] 配置中未指定 'enable_module' 或 'adapter_type'。將使用根配置。")
             self.adapter_specific_config = self.config  # 如果沒有指定適配器，則使用整個模塊配置
 
-
-
         if self.save_generated_audio:  # 移除了 os.path.exists 檢查，將在保存時創建
             logger.info(f"音頻將保存在: {self.audio_save_path} (如果目錄不存在，將在首次保存時創建)")
 
@@ -84,7 +75,7 @@ class BaseTTS(BaseModule):  # 假設 BaseModule 是正確的基類
         (AudioFormat 枚舉, sample_rate, channels, sample_width)。
         """
         if False:  # pragma: no cover
-            yield AudioData(data=b"", chunk_id="", format=AudioFormat.PCM, sample_rate=0, channels=0, sample_width=0,
+            yield AudioData(data=b"", format=AudioFormat.PCM,
                             is_final=True, metadata={})
 
     async def _save_audio_segment(self, audio_data_to_save: AudioData, segment_identifier: Union[int, str]) -> None:
@@ -137,11 +128,7 @@ class BaseTTS(BaseModule):  # 假設 BaseModule 是正確的基類
             async for native_audio_data in self.text_to_speech_stream(text_input, **kwargs):
                 current_audio_data = AudioData(
                     data=native_audio_data.data,
-                    chunk_id=chunk_id,  # 確保使用 process_stream 的 chunk_id
                     format=native_audio_data.format,
-                    sample_rate=native_audio_data.sample_rate,
-                    channels=native_audio_data.channels,
-                    sample_width=native_audio_data.sample_width,
                     is_final=native_audio_data.is_final,
                     metadata={**(native_audio_data.metadata or {}), "source_module_id": self.module_id}
                 )
@@ -170,11 +157,7 @@ class BaseTTS(BaseModule):  # 假設 BaseModule 是正確的基類
                 logger.info(f"TTS ProcessStream [{self.module_id}] (流ID: {chunk_id}) 準備保存累積的音頻數據。")
                 complete_audio_to_save = AudioData(
                     data=bytes(accumulated_audio_bytes),
-                    chunk_id=chunk_id,  # 使用 process_stream 的 chunk_id
                     format=first_valid_audio_chunk_props["format"],
-                    sample_rate=first_valid_audio_chunk_props["sample_rate"],
-                    channels=first_valid_audio_chunk_props["channels"],
-                    sample_width=first_valid_audio_chunk_props["sample_width"],
                     is_final=True,  # 這是完整的音頻
                     metadata={"source_module_id": self.module_id, "status": "complete_audio_saved_after_stream"}
                 )
@@ -190,11 +173,8 @@ class BaseTTS(BaseModule):  # 假設 BaseModule 是正確的基類
                          exc_info=True)
             # 發生錯誤時，產生一個錯誤標記的 AudioData
             yield AudioData(
-                data=b"", chunk_id=chunk_id,
+                data=b"",
                 format=AudioFormat.PCM,
-                sample_rate=16000,
-                channels=1,
-                sample_width=2,
                 is_final=True,
                 metadata={"error": f"tts_processing_error: {str(e)}", "source_module_id": self.module_id}
             )
@@ -213,11 +193,7 @@ class BaseTTS(BaseModule):  # 假設 BaseModule 是正確的基類
             if aggregated_data_shell is None and audio_data_chunk.data:  # 捕獲第一個非空塊的屬性
                 aggregated_data_shell = AudioData(
                     data=b'',  # 初始為空，稍後填充
-                    chunk_id=audio_data_chunk.chunk_id,
                     format=audio_data_chunk.format,
-                    sample_rate=audio_data_chunk.sample_rate,
-                    channels=audio_data_chunk.channels,
-                    sample_width=audio_data_chunk.sample_width,
                     is_final=True,  # 最終結果總是 is_final
                     metadata=final_metadata  # 初始元數據
                 )
@@ -232,9 +208,7 @@ class BaseTTS(BaseModule):  # 假設 BaseModule 是正確的基類
                 # 如果 aggregated_data_shell 仍然是 None (例如，流是空的但有 is_final)
                 if aggregated_data_shell is None:
                     aggregated_data_shell = AudioData(
-                        data=b'', chunk_id=audio_data_chunk.chunk_id, format=audio_data_chunk.format,
-                        sample_rate=audio_data_chunk.sample_rate, channels=audio_data_chunk.channels,
-                        sample_width=audio_data_chunk.sample_width, is_final=True, metadata=final_metadata
+                        data=b'', format=audio_data_chunk.format, is_final=True, metadata=final_metadata
                     )
                 break  # is_final 標誌著流的結束
 
@@ -253,4 +227,3 @@ class BaseTTS(BaseModule):  # 假設 BaseModule 是正確的基類
         """運行 TTS 模塊的入口方法，默認使用流式處理。"""
         async for audio_data in self.process_stream(input_data, **kwargs):
             yield audio_data
-

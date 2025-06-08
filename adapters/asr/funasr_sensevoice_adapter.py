@@ -1,5 +1,5 @@
 import asyncio
-import logging
+from utils.logging_setup import logger
 import os
 from functools import partial  # 導入 partial
 from typing import Optional, Dict, Any
@@ -13,7 +13,7 @@ from core.exceptions import ModuleInitializationError, ModuleProcessingError
 from modules.base_asr import BaseASR  # 確保路徑正確
 
 # 日誌記錄器
-logger = logging.getLogger(__name__)
+
 
 # 動態導入 FunASR
 try:
@@ -35,11 +35,8 @@ class FunASRSenseVoiceAdapter(BaseASR):
 
     def __init__(self, module_id: str, config: Optional[Dict[str, Any]] = None,
                  event_loop: Optional[asyncio.AbstractEventLoop] = None,
-                 event_manager: Optional[Any] = None):
-        # 調用 BaseASR 的 __init__。
-        # BaseASR 會從傳入的 config (即 YAML 中 funasr_sensevoice 下的字典)
-        # 讀取 "language", "sample_rate", "channels", "sample_width" 等參數。
-        super().__init__(module_id, config, event_loop, event_manager)
+                 ):
+        super().__init__(module_id, config, event_loop)
 
         if not FUNASR_AVAILABLE:  # pragma: no cover
             raise ModuleInitializationError(
@@ -60,7 +57,6 @@ class FunASRSenseVoiceAdapter(BaseASR):
         logger.info(f"FunASR [{self.module_id}] 適配器特定配置已從 BaseASR.adapter_specific_config 加載:")
         logger.info(f"  - model_dir: {self.model_dir}")
         logger.info(f"  - device: {self.device}")
-        # ... (其他日誌)
 
     async def initialize(self):
         """異步初始化 FunASR SenseVoice 模型。"""

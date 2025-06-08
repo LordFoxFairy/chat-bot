@@ -1,29 +1,18 @@
 import asyncio
 from typing import Type, Optional, Dict, Any
-
 from modules.base_vad import BaseVAD
 from core.exceptions import ModuleInitializationError
-
-# VAD适配器
+from utils.logging_setup import logger
 from .silero_vad_adapter import SileroVADAdapter
-
-# 为未来可能的其他VAD适配器预留位置，例如:
-# from .webrtc_vad_adapter import WebRTCVADAdapter
-
-# 如果需要更正式的EventManager类型提示:
-# from core_framework.event_manager import EventManager
 
 VAD_ADAPTER_REGISTRY: Dict[str, Type[BaseVAD]] = {
     "silero_vad": SileroVADAdapter,
-    # "webrtc_vad": WebRTCVADAdapter, # 示例
 }
-
 
 def create_vad_adapter(
         module_id: str,
         config: Optional[Dict[str, Any]] = None,
         event_loop: Optional[asyncio.AbstractEventLoop] = None,
-        event_manager: Optional[Any] = None  # 使用 Any 以避免循环导入
 ) -> BaseVAD:
     """
     根据指定的 module_id 创建并返回一个VAD适配器实例。
@@ -49,13 +38,12 @@ def create_vad_adapter(
         )
 
     try:
-        print(
+        logger.info(
             f"[VAD工厂] 正在为类型 '{adapter_type}' (模块ID: '{module_id}') 创建实例，使用类: '{adapter_class.__name__}'")
         instance = adapter_class(
             module_id=module_id,
             config=config,
-            event_loop=event_loop,
-            event_manager=event_manager
+            event_loop=event_loop
         )
         return instance
     except Exception as e:

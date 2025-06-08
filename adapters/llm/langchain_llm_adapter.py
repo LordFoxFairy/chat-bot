@@ -1,33 +1,15 @@
 import asyncio
 import os
-import logging  # 使用标准 logging
+from utils.logging_setup import logger
 from typing import List, Dict, Any, Optional, AsyncGenerator
 
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, BaseMessage  # type: ignore
-from langchain_core.language_models.chat_models import BaseChatModel  # type: ignore
-from langchain_core.exceptions import OutputParserException  # type: ignore # 用于更具体的错误捕获
-
-# 尝试导入特定提供商的Langchain类
-try:
-    from langchain_openai import ChatOpenAI  # type: ignore
-except ImportError:  # pragma: no cover
-    ChatOpenAI = None
-    logging.getLogger(__name__).warning("langchain_openai not installed. OpenAI provider will not be available.")
-
-try:
-    from langchain_deepseek import ChatDeepSeek  # type: ignore
-except ImportError:  # pragma: no cover
-    ChatDeepSeek = None
-    logging.getLogger(__name__).warning("langchain_deepseek not installed. DeepSeek provider will not be available.")
-
-# from langchain_anthropic import ChatAnthropic # 示例，如果需要支持
-
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, BaseMessage
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.exceptions import OutputParserException
+from langchain_openai import ChatOpenAI
+from langchain_deepseek import ChatDeepSeek
 from core.exceptions import ModuleInitializationError, ModuleProcessingError
-from modules.base_llm import BaseLLM  # 继承自重构后的 BaseLLM
-
-# from data_models.text_data import TextData # 虽然不直接用，但保持上下文一致性
-
-logger = logging.getLogger(__name__)  # 使用标准 logging
+from modules.base_llm import BaseLLM
 
 
 class LangchainLLMAdapter(BaseLLM):
@@ -36,17 +18,14 @@ class LangchainLLMAdapter(BaseLLM):
     """
 
     def __init__(self, module_id: str, config: Dict[str, Any],
-                 event_loop: Optional[asyncio.AbstractEventLoop] = None,
-                 event_manager: Optional[Any] = None,  # 'EventManager'
-                 session_manager: Optional[Any] = None):  # 'SessionManager'
+                 event_loop: Optional[asyncio.AbstractEventLoop] = None):
         """
         初始化 LangchainLLMAdapter。
         Args:
             module_id (str): 模块的唯一ID。
             config (Dict[str, Any]): LLM模块的完整配置字典。BaseLLM的__init__将处理它。
-            event_loop, event_manager, session_manager: 由BaseLLM传递。
         """
-        super().__init__(module_id, config, event_loop, event_manager, session_manager)
+        super().__init__(module_id, config,event_loop)
 
         self.llm_client: Optional[BaseChatModel] = None
         # 以下属性将从 self.provider_specific_config (由BaseLLM的__init__解析并设置) 中读取
@@ -61,7 +40,6 @@ class LangchainLLMAdapter(BaseLLM):
         初始化Langchain LLM客户端。
         此方法在BaseLLM.initialize()之后被调用（如果BaseLLM.initialize()成功）。
         """
-
 
         if not self.enabled_provider_name:  # pragma: no cover (BaseLLM.initialize 应该已经捕获了这种情况)
             msg = f"LangchainLLMAdapter [{self.module_id}]: 'enable_module' (LLM提供商名称) 未在配置中指定。"
@@ -79,7 +57,6 @@ class LangchainLLMAdapter(BaseLLM):
         logger.info(
             f"LangchainLLMAdapter [{self.module_id}]: 开始初始化提供商 '{self.enabled_provider_name}' 的Langchain客户端...")
 
-        # 从 self.provider_specific_config (已由BaseLLM的__init__填充) 中获取配置
         self.model_name = self.provider_specific_config.get("model_name")
         api_key_env_var = self.provider_specific_config.get("api_key_env_var")
         self.api_key = self.provider_specific_config.get("api_key")
@@ -114,19 +91,11 @@ class LangchainLLMAdapter(BaseLLM):
         # 初始化Langchain聊天模型客户端
         try:
             if self.enabled_provider_name == "openai":
-                if not ChatOpenAI: raise ModuleInitializationError(
-                    "ChatOpenAI (langchain_openai) 未安装。")  # pragma: no cover
                 self.llm_client = ChatOpenAI(model=self.model_name, temperature=self.temperature,
-                                             openai_api_key=self.api_key)  # type: ignore
+                                             openai_api_key=self.api_key)
             elif self.enabled_provider_name == "deepseek":
-                if not ChatDeepSeek: raise ModuleInitializationError(
-                    "ChatDeepSeek (langchain_deepseek) 未安装。")  # pragma: no cover
-                # 确保传递正确的参数名，例如 deepseek_api_key
                 self.llm_client = ChatDeepSeek(model=self.model_name, temperature=self.temperature,
-                                               api_key=self.api_key)  # type: ignore
-            # elif self.enabled_provider_name == "anthropic": # 示例
-            #     if not ChatAnthropic: raise ModuleInitializationError("ChatAnthropic (langchain_anthropic) 未安装。")
-            #     self.llm_client = ChatAnthropic(model=self.model_name, temperature=self.temperature, anthropic_api_key=self.api_key)
+                                               api_key=self.api_key)
             else:
                 msg = f"LangchainLLMAdapter [{self.module_id}]: 不支持的LLM提供商名称 '{self.enabled_provider_name}'。"
                 logger.error(msg)
@@ -135,7 +104,7 @@ class LangchainLLMAdapter(BaseLLM):
 
             logger.info(
                 f"LangchainLLMAdapter [{self.module_id}]: 已成功初始化提供商 '{self.enabled_provider_name}' 的模型 '{self.model_name}' (温度: {self.temperature})。")
-            self._is_ready = True  # 只有在客户端成功初始化后才标记为就绪
+            self._is_ready = True
 
         except Exception as e:  # pragma: no cover
             msg = f"LangchainLLMAdapter [{self.module_id}]: 初始化LLM客户端 (提供商: {self.enabled_provider_name}, 模型: {self.model_name}) 失败: {e}"
@@ -143,7 +112,7 @@ class LangchainLLMAdapter(BaseLLM):
             self._is_ready = False
             raise ModuleInitializationError(msg) from e
 
-    def _prepare_llm_messages(self, user_prompt: str, dialogue_history: List[Dict[str, Any]]) -> List[BaseMessage]:
+    def _prepare_llm_messages(self, user_prompt: str, dialogue_history: Optional[List[Dict[str, Any]]]) -> List[BaseMessage]:
         """
         将用户提示和结构化的对话历史转换为Langchain BaseMessage对象列表。
         Args:
@@ -184,8 +153,7 @@ class LangchainLLMAdapter(BaseLLM):
         # logger.debug(f"LangchainLLMAdapter [{self.module_id}]: 准备了 {len(messages)} 条消息给LLM。最后一条是用户提示: '{user_prompt[:50]}...'")
         return messages
 
-    async def _llm_ainvoke(self, messages: List[BaseMessage], session_id: str,
-                           metadata: Optional[Dict[str, Any]]) -> AIMessage:
+    async def _llm_ainvoke(self, messages: List[BaseMessage]) -> AIMessage:
         """
         实现非流式LLM调用。
         """
@@ -193,13 +161,7 @@ class LangchainLLMAdapter(BaseLLM):
             logger.error(f"LangchainLLMAdapter [{self.module_id}]: LLM客户端未初始化，无法执行ainvoke。")
             raise ModuleProcessingError(f"LLM客户端 (模块 {self.module_id}) 未初始化。")
 
-        logger.debug(
-            f"LangchainLLMAdapter [{self.module_id}] (提供商: {self.enabled_provider_name or '未知'}) 正在为会话 '{session_id}' 调用 ainvoke，消息数: {len(messages)}。")
-
         try:
-            # langchain config 可以传递一些元数据或回调，具体看LLM提供商支持情况
-            langchain_call_config = {"metadata": metadata or {},
-                                     "tags": [f"session:{session_id}", f"module:{self.module_id}"]}
             response = await self.llm_client.ainvoke(messages, config=langchain_call_config)  # type: ignore
 
             if not isinstance(response, AIMessage):  # pragma: no cover
@@ -218,8 +180,8 @@ class LangchainLLMAdapter(BaseLLM):
             logger.error(f"LangchainLLMAdapter [{self.module_id}]: LLM ainvoke 期间发生未知错误: {e}", exc_info=True)
             raise ModuleProcessingError(f"LLM 调用 (ainvoke) 失败: {e}") from e
 
-    async def _llm_astream(self, messages: List[BaseMessage], session_id: str, metadata: Optional[Dict[str, Any]]) -> \
-    AsyncGenerator[AIMessage, None]:
+    async def _llm_astream(self, messages: List[BaseMessage]) -> \
+            AsyncGenerator[AIMessage, None]:
         """
         实现流式LLM调用。
         """
@@ -227,14 +189,9 @@ class LangchainLLMAdapter(BaseLLM):
             logger.error(f"LangchainLLMAdapter [{self.module_id}]: LLM客户端未初始化，无法执行astream。")
             raise ModuleProcessingError(f"LLM客户端 (模块 {self.module_id}) 未初始化。")
 
-        logger.debug(
-            f"LangchainLLMAdapter [{self.module_id}] (提供商: {self.enabled_provider_name or '未知'}) 正在为会话 '{session_id}' 调用 astream，消息数: {len(messages)}。")
-
         try:
-            langchain_call_config = {"metadata": metadata or {},
-                                     "tags": [f"session:{session_id}", f"module:{self.module_id}"]}
-            async for chunk in self.llm_client.astream(messages, config=langchain_call_config):  # type: ignore
-                if not isinstance(chunk, AIMessage):  # pragma: no cover
+            async for chunk in self.llm_client.astream(messages):
+                if not isinstance(chunk, AIMessage):
                     logger.warning(
                         f"LangchainLLMAdapter [{self.module_id}]: LLM astream 返回了非AIMessage类型的块: {type(chunk)}。块内容: {chunk}")
                     # 根据策略决定是跳过这个块还是作为错误处理

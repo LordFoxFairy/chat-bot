@@ -1,6 +1,7 @@
 from typing import Type, Optional, Dict, Any
 import asyncio
 
+from utils.logging_setup import logger
 # 导入所有支持的 ASR 适配器类
 from .funasr_sensevoice_adapter import FunASRSenseVoiceAdapter
 
@@ -26,8 +27,6 @@ def create_asr_adapter(
         module_id: str,
         config: Optional[Dict[str, Any]] = None,
         event_loop: Optional[asyncio.AbstractEventLoop] = None,
-        event_manager: Optional[Any] = None,  # 使用 Any 避免循环导入 EventManager
-        # session_manager: Optional[Any] = None # BaseASR 目前不需要 session_manager
 ) -> BaseASR:
     """
     根据指定的 adapter_type 创建并返回一个 ASR 适配器实例。
@@ -36,7 +35,6 @@ def create_asr_adapter(
         module_id (str): 要分配给模块实例的 ID.
         config (Optional[Dict[str, Any]]): 模块的配置字典.
         event_loop (Optional[asyncio.AbstractEventLoop]): 事件循环.
-        event_manager (Optional[Any]): 事件管理器实例.
 
     返回:
         BaseASR: 一个 ASR 适配器的实例.
@@ -53,14 +51,14 @@ def create_asr_adapter(
         )
 
     try:
-        print(f"[ASR Factory] 正在为类型 '{adapter_type}' 创建实例 '{module_id}' 使用类 '{adapter_class.__name__}'")
+        logger.info(
+            f"[ASR Factory] 正在为类型 '{adapter_type}' 创建实例 '{module_id}' 使用类 '{adapter_class.__name__}'")
         # 注意：这里不传递 session_manager，因为 BaseASR 的构造函数不接收它
         # 如果将来有 ASR 适配器需要，可以调整
         instance = adapter_class(
             module_id=module_id,
             config=config,
-            event_loop=event_loop,
-            event_manager=event_manager
+            event_loop=event_loop
         )
         return instance
     except Exception as e:

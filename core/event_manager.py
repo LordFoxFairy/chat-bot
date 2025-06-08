@@ -1,16 +1,7 @@
-# chat-bot/core_framework/event_manager.py
 import asyncio
-import logging
+from utils.logging_setup import logger
 from typing import Callable, Dict, List, Any, Coroutine, Set, Optional
-
-# --- 使用您项目中的 EventType 和 StreamEvent ---
-# 假设您的 stream_event.py 文件与 event_manager.py 在同一层级或可通过Python路径访问
-# 如果不在同一层级，您可能需要调整导入路径，例如：
-# from ..data_models.stream_event import StreamEvent, EventType
-# 假设它们在 data_models 包下，并且 event_manager 在 core_framework 包下
-from data_models.stream_event import StreamEvent, EventType  # 直接使用您定义的 EventType
-
-logger = logging.getLogger(__name__)  # 获取当前模块的 logger 实例
+from data_models.stream_event import StreamEvent, EventType
 
 # 定义监听器回调函数的类型别名，它接收一个 StreamEvent 对象
 ListenerCallback = Callable[[StreamEvent], Coroutine[Any, Any, None]]
@@ -197,7 +188,6 @@ class EventManager:
 
             shutdown_event = StreamEvent(
                 event_type=EventType.SERVER_SYSTEM_MESSAGE,
-                data="_shutdown_signal_",
                 session_id="system_shutdown"
             )
             await self.post_event(shutdown_event)

@@ -16,9 +16,9 @@ if TYPE_CHECKING:
     from core.event_manager import EventManager
 
 # 日誌記錄器
-import logging
+from utils.logging_setup import logger
 
-logger = logging.getLogger(__name__)
+
 
 
 class BaseASR(BaseModule):
@@ -31,9 +31,9 @@ class BaseASR(BaseModule):
 
     def __init__(self, module_id: str, config: Optional[Dict[str, Any]] = None,
                  event_loop: Optional[asyncio.AbstractEventLoop] = None,
-                 event_manager: Optional['EventManager'] = None):
+                 ):
         # config 參數此處預期是 YAML 中 modules.asr 下的整個字典
-        super().__init__(module_id, config, event_loop, event_manager)  # self.config 將是頂層 ASR 配置
+        super().__init__(module_id, config, event_loop)  # self.config 將是頂層 ASR 配置
 
         # 從頂層 ASR 配置 (self.config) 中讀取通用設置
         self.enabled: bool = self.config.get("enabled", False)

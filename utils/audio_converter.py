@@ -1,23 +1,11 @@
 import io
-import logging
+import pydub
+from utils.logging_setup import logger
 from typing import Optional
-
 import numpy as np
-
-# 動態導入 pydub，如果未安裝則給出提示
-try:
-    from pydub import AudioSegment
-    from pydub.exceptions import CouldntDecodeError
-
-    PYDUB_AVAILABLE = True
-except ImportError:
-    AudioSegment = None  # type: ignore
-    CouldntDecodeError = None  # type: ignore
-    PYDUB_AVAILABLE = False
-
-from data_models import AudioData, AudioFormat  # 假設這些數據模型已定義
-
-logger = logging.getLogger(__name__)  # 統一使用此 logger
+from pydub import AudioSegment
+from pydub.exceptions import CouldntDecodeError
+from data_models import AudioData, AudioFormat
 
 
 def convert_to_target_format(
@@ -41,7 +29,7 @@ def convert_to_target_format(
     返回:
         Optional[np.ndarray]: 轉換後的 float32 NumPy 數組，如果轉換失敗則返回 None。
     """
-    if not PYDUB_AVAILABLE:
+    if not pydub:
         logger.error("音頻轉換失敗: 'pydub' 庫未安裝。請運行 'pip install pydub'。")
         return None
     if not AudioSegment or not CouldntDecodeError:
@@ -119,96 +107,3 @@ def convert_to_target_format(
     except Exception as e:
         logger.error(f"音頻轉換過程中發生未知錯誤: {e}", exc_info=True)
         return None
-
-
-# 示例用法 (僅用於測試，實際使用時會由 ASR 適配器調用)
-async def main_test():
-    if not PYDUB_AVAILABLE:
-        logger.error("Pydub 未安裝，無法運行測試。")
-        return
-
-    # 創建一個假的 Opus AudioData (需要一個真實的 Opus 文件字節流來測試)
-    fake_opus_bytes = b"..."
-    if not fake_opus_bytes or fake_opus_bytes == b"...":
-        logger.info("跳過 Opus 測試，因為沒有提供有效的 Opus 字節。")
-    else:
-        # 假設 AudioFormat.OPUS.value == "opus"
-        audio_input_opus = AudioData(
-            data=fake_opus_bytes,
-            format=AudioFormat.OPUS,
-            sample_rate=48000,
-            channels=1,
-            sample_width=2  # Opus 的 sample_width 不是直接意義上的，pydub 會處理
-        )
-        logger.info(f"\n測試 Opus 輸入: {audio_input_opus.format.value}")
-        converted_np_array_opus = convert_to_target_format(
-            audio_input_opus,
-            target_sample_rate=16000,
-            target_channels=1,
-            target_sample_width=2
-        )
-        if converted_np_array_opus is not None:
-            logger.info(
-                f"Opus 轉換成功，NumPy 數組形狀: {converted_np_array_opus.shape}, 類型: {converted_np_array_opus.dtype}")
-        else:
-            logger.error("Opus 轉換失敗。")
-
-            # 創建一個假的 PCM AudioData
-    sample_rate = 16000
-    duration_seconds = 1
-    channels = 1
-    sample_width_bytes = 2  # 16-bit
-    num_samples = sample_rate * duration_seconds
-    fake_pcm_data_int16 = np.random.randint(-32768, 32767, num_samples * channels, dtype=np.int16)
-
-    # 假設 AudioFormat.PCM.value == "pcm"
-    audio_input_pcm = AudioData(
-        data=fake_pcm_data_int16.tobytes(),
-        format=AudioFormat.PCM,
-        sample_rate=sample_rate,
-        channels=channels,
-        sample_width=sample_width_bytes
-    )
-    logger.info(f"\n測試 PCM 輸入: {audio_input_pcm.format.value}")
-    converted_np_array_pcm = convert_to_target_format(
-        audio_input_pcm,
-        target_sample_rate=16000,
-        target_channels=1,
-        target_sample_width=2
-    )
-    if converted_np_array_pcm is not None:
-        logger.info(
-            f"PCM 轉換成功，NumPy 數組形狀: {converted_np_array_pcm.shape}, 類型: {converted_np_array_pcm.dtype}")
-    else:
-        logger.error("PCM 轉換失敗。")
-
-
-if __name__ == "__main__":
-    from enum import Enum
-    import asyncio
-
-
-    class AudioFormat(Enum):
-        PCM = "pcm"
-        WAV = "wav"
-        MP3 = "mp3"
-        OGG = "ogg"
-        FLAC = "flac"
-        OPUS = "opus"
-
-
-    class AudioData:
-        def __init__(self, data: bytes, format: AudioFormat, sample_rate: int, channels: int, sample_width: int):
-            self.data = data
-            self.format = format
-            self.sample_rate = sample_rate
-            self.channels = channels
-            self.sample_width = sample_width
-
-
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    asyncio.run(main_test())
-

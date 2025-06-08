@@ -1,15 +1,11 @@
-# chat-bot/adapters/vad/silero_vad_adapter.py
 import torch
 import numpy as np
 from modules.base_vad import BaseVAD
 from data_models.audio_data import AudioData
 from typing import Optional, Dict, Any
 import asyncio
-import logging
+from utils.logging_setup import logger
 import os
-
-logger = logging.getLogger(__name__)
-
 
 class SileroVADAdapter(BaseVAD):
     """
@@ -19,12 +15,10 @@ class SileroVADAdapter(BaseVAD):
 
     def __init__(self, module_id: str,
                  config: Optional[Dict[str, Any]] = None,
-                 event_loop: Optional[asyncio.AbstractEventLoop] = None,
-                 event_manager: Optional[Any] = None):
+                 event_loop: Optional[asyncio.AbstractEventLoop] = None):
         super().__init__(
             module_id=module_id,
             config=config,
-            event_loop=event_loop
         )
 
         adapter_specific_parent_config = self.config.get('config', {})
@@ -107,14 +101,6 @@ class SileroVADAdapter(BaseVAD):
 
         if not self.is_ready or not self.model:
             logger.error(f"{log_prefix} VAD 模型未就绪。")
-            return False
-
-        if audio_data.sample_rate != self.vad_sample_rate or \
-                audio_data.channels != 1 or \
-                audio_data.sample_width != 2:
-            logger.error(
-                f"{log_prefix} 音频参数不匹配: 输入 SR={audio_data.sample_rate}/CH={audio_data.channels}/SW={audio_data.sample_width}, "
-                f"VAD期望 SR={self.vad_sample_rate}/CH=1/SW=2.")
             return False
 
         if not audio_data.data:

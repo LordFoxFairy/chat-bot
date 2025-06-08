@@ -1,6 +1,6 @@
 # test_single_tts.py
 import asyncio
-import logging
+from utils.logging_setup import logger
 import os
 import sys
 import uuid
@@ -12,8 +12,7 @@ from typing import Dict, Any, Optional
 from data_models.text_data import TextData
 # from data_models.audio_data import AudioData # 主要用於類型提示，測試依賴 BaseTTS 保存
 from adapters.tts.edge_tts_adapter import EdgeTTSAdapter
-from core.exceptions import ModuleInitializationError  # 假設的異常
-from services.config_loader import ConfigLoader
+from utils.config_loader import ConfigLoader
 
 # 配置日誌記錄
 logging.basicConfig(
@@ -23,7 +22,7 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout)
     ]
 )
-logger = logging.getLogger(__name__)
+
 
 
 def load_yaml_config(config_path: str) -> Optional[Dict[str, Any]]:
