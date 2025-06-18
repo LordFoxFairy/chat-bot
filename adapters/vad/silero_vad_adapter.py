@@ -1,11 +1,13 @@
-import torch
-import numpy as np
-from modules.base_vad import BaseVAD
-from data_models.audio_data import AudioData
-from typing import Optional, Dict, Any
 import asyncio
-from utils.logging_setup import logger
 import os
+from typing import Optional, Dict, Any
+
+import numpy as np
+import torch
+
+from modules.base_vad import BaseVAD
+from utils.logging_setup import logger
+
 
 class SileroVADAdapter(BaseVAD):
     """
@@ -93,7 +95,7 @@ class SileroVADAdapter(BaseVAD):
                 f"SileroVADAdapter [{self.module_id}] (Boolean Interface) reset_state called, but model has no reset_states method or model not loaded.")
         await super().reset_state()
 
-    async def is_speech_present(self, audio_data: AudioData) -> bool:
+    async def is_speech_present(self, audio_data: bytes) -> bool:
         """
         对传入的单个音频窗口进行语音活动判断，返回 True 或 False。
         """
@@ -103,19 +105,12 @@ class SileroVADAdapter(BaseVAD):
             logger.error(f"{log_prefix} VAD 模型未就绪。")
             return False
 
-        if not audio_data.data:
+        if not audio_data:
             logger.debug(f"{log_prefix}: 收到空音频数据。")
             return False  # 空数据认为无语音
 
-        expected_bytes_per_window = self.window_size_samples * audio_data.sample_width
-        if len(audio_data.data) != expected_bytes_per_window:
-            logger.warning(f"{log_prefix} 输入音频数据长度 ({len(audio_data.data)} bytes) "
-                           f"与期望的VAD窗口大小 ({expected_bytes_per_window} bytes) 不符。")
-            # 对于不匹配的窗口大小，保守地返回 False，或者根据模型行为调整
-            return False
-
         try:
-            audio_int16 = np.frombuffer(audio_data.data, dtype=np.int16)
+            audio_int16 = np.frombuffer(audio_data, dtype=np.int16)
             audio_float32 = audio_int16.astype(np.float32) / 32768.0
             audio_tensor = torch.from_numpy(audio_float32).to(self.device)
 

@@ -1,24 +1,22 @@
-from abc import abstractmethod
 import asyncio
+from abc import abstractmethod
 from typing import Optional, Dict, Any, AsyncGenerator, TYPE_CHECKING, List
 
 import numpy as np
 
 from core.exceptions import ModuleProcessingError  # 確保導入 ModuleProcessingError
-# 假設 BaseModule 從您的項目路徑導入
-from modules.base_module import BaseModule
 # 導入框架定義的核心數據模型
 from data_models import AudioData, TextData, AudioFormat
+# 假設 BaseModule 從您的項目路徑導入
+from modules.base_module import BaseModule
 # 導入音頻轉換工具
 from utils.audio_converter import convert_to_target_format  # 確保路徑正確
 
 if TYPE_CHECKING:
-    from core.event_manager import EventManager
+    pass
 
 # 日誌記錄器
 from utils.logging_setup import logger
-
-
 
 
 class BaseASR(BaseModule):
@@ -161,7 +159,6 @@ class BaseASR(BaseModule):
             chunk_id=session_id,  # session_id 在此處填充
             is_final=is_final_input,
             language=self.language,
-            confidence=None,  # 因為 _infer_and_parse_audio_numpy 只返回文本，置信度設為 None
             metadata=common_metadata  # 元數據只包含通用部分，不再嘗試合併 parsed_info.get("metadata")
         )
 

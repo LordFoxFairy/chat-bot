@@ -37,13 +37,13 @@ class BaseVAD(BaseModule):
         pass
 
     @abstractmethod
-    async def is_speech_present(self, audio_data: AudioData) -> bool:
+    async def is_speech_present(self, audio_data: bytes) -> bool:
         """
         判断传入的单个音频窗口是否包含语音。
-        ChatEngine 应确保传入的 audio_data.data 包含一个适合VAD处理的音频窗口。
+        ChatEngine 应确保传入的 audio_data 包含一个适合VAD处理的音频窗口。
 
         Args:
-            audio_data (AudioData): 包含单个音频窗口及其元数据的对象。
+            audio_data : 包含单个音频窗口及其元数据的对象。
 
         Returns:
             bool: True 如果当前窗口有语音，否则 False。

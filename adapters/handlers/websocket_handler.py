@@ -8,10 +8,12 @@ from typing import Optional, List, Dict
 import websockets
 
 import constant
+from core.session_context import SessionContext
 from core.session_manager import session_manager
 from data_models import StreamEvent, EventType, TextData
-from modules import BaseLLM, BaseTTS
+from modules import BaseLLM, BaseTTS, BaseVAD, BaseASR
 from modules.base_handler import BaseHandler
+from service.AudioConsumer import AudioConsumer
 from utils.logging_setup import logger
 
 
@@ -41,6 +43,9 @@ class WebSocketServerHandler(BaseHandler):
         # 在纯 asyncio 模式下，不需要手动管理事件循环和线程
         # self.loop = None
         # self.thread = None
+
+        # 用於儲存每個 session_id 對應的 AudioConsumer 實例
+        self.audio_consumers: Dict[str, AudioConsumer] = {}
 
         print(f"[服务器] WebSocketServerHandler 已初始化，监听地址: {self.host}:{self.port}")
 
@@ -101,6 +106,27 @@ class WebSocketServerHandler(BaseHandler):
             print(
                 f"[服务器] 已向 {websocket.remote_address} (Tag ID: {current_tag_id}) 发送 Session ID: {current_session_id}")
 
+            user_context = SessionContext()
+            user_context.session_id = current_session_id
+            user_context.tag_id = current_tag_id
+            session_manager.create_session(user_context)
+
+            # 為此會話建立並儲存一個 AudioConsumer 實例
+            context = session_manager.get_session(constant.CHAT_ENGINE_NAME)
+            vad_module: BaseVAD = context.global_module_manager.get_module("vad")
+            asr_module: BaseASR = context.global_module_manager.get_module("asr")
+            consumer = AudioConsumer(
+                    session_context=user_context,
+                    vad_module=vad_module,
+                    asr_module=asr_module,
+                    text_handler_callback=self.handle_text,
+                    silence_timeout=2.0,
+                    audio_segment_threshold=0.3,
+                    bytes_per_second=32000,
+                )
+            consumer.start()
+            self.audio_consumers[user_context.session_id] = consumer
+
             return current_tag_id, current_session_id
         else:
             print(f"[服务器] 客户端 {websocket.remote_address} 发送了非注册消息作为第一条消息，关闭连接。")
@@ -112,22 +138,25 @@ class WebSocketServerHandler(BaseHandler):
         """
 
         current_tag_id = None
-        current_session_id = None
+
         try:
             current_tag_id, current_session_id = await self.register(websocket)
-
+            metadata = {"session_id": current_session_id, "tad_id": current_tag_id}
             # 4. 持续处理来自客户端的后续消息
             async for raw_message in websocket:
+
+                if isinstance(raw_message, bytes):
+                    self.handle_audio(raw_message, metadata)
+                    continue
                 try:
                     message_data = StreamEvent.model_validate_json(raw_message)
-                    sender_tag_id = message_data.tag_id
-                    sender_session_id = message_data.session_id
+                    sender_tag_id = current_tag_id
+                    sender_session_id = current_session_id
 
                     # 验证消息是否来自当前活跃的 session
                     if sender_tag_id == current_tag_id and sender_session_id == current_session_id:
                         logger.info(
                             f"[服务器] 收到来自 Tag ID {sender_tag_id} (Session {sender_session_id}) 的消息: {message_data}")
-                        metadata = {"session_id": sender_session_id, "tad_id": sender_tag_id}
                         await self.handle_message(message_data, metadata)
 
                     else:
@@ -138,7 +167,6 @@ class WebSocketServerHandler(BaseHandler):
                     print(f"[服务器] 收到来自 {websocket.remote_address} 的非 JSON 格式消息: {raw_message}")
                 except Exception as e:
                     print(f"[服务器] 处理来自 {websocket.remote_address} 的消息时发生错误: {e}")
-
         except websockets.exceptions.ConnectionClosedOK:
             print(f"[服务器] 客户端 {websocket.remote_address} 正常断开连接。")
         except websockets.exceptions.ConnectionClosedError as e:
@@ -164,7 +192,12 @@ class WebSocketServerHandler(BaseHandler):
                     # 移除这个 tag_id 的当前 session 映射
                     print(f"[服务器] Tag ID {current_tag_id} 的当前 Session 已断开。")
 
-                del self.websocket_to_session_id[websocket]  # 移除 websocket 到 session_id 的映射
+                if disconnected_session_id and disconnected_session_id in self.audio_consumers:
+                    logger.info(f"Cleaning up resources for session {disconnected_session_id}.")
+                    self.audio_consumers[disconnected_session_id].stop()  # 停止背景執行緒
+                    del self.audio_consumers[disconnected_session_id]
+
+            del self.websocket_to_session_id[websocket]  # 移除 websocket 到 session_id 的映射
 
             print(f"[服务器] 客户端 {websocket.remote_address} 已断开连接。")
             print(f"[服务器] 当前活跃 Tag ID 数量: {len(self.tag_to_current_session)}")
@@ -175,7 +208,8 @@ class WebSocketServerHandler(BaseHandler):
         if message_type == EventType.CLIENT_TEXT_INPUT:
             await self.handle_text(message_data, metadata)
 
-    def serialize_stream_event_with_audio(self, event: StreamEvent):
+    @staticmethod
+    def serialize_stream_event_with_audio(event: StreamEvent):
         """
         将 StreamEvent 实例序列化为 JSON 字符串。
         如果 event_data 是 AudioData 且包含 bytes 数据，则将其 Base64 编码。
@@ -238,7 +272,6 @@ class WebSocketServerHandler(BaseHandler):
                         payload.event_data = TextData(text=complete_sentence, is_final=False, message_id=message_id)
                         await self._broadcast_message(payload.model_dump_json())
 
-
                         audio_data = await tts_module.text_to_speech_block(payload.event_data)
                         audio_data.message_id = message_id
                         audio.event_data = audio_data
@@ -257,7 +290,6 @@ class WebSocketServerHandler(BaseHandler):
         else:
             payload.event_data = TextData(text=buffer, is_final=True)
             await self._broadcast_message(payload.model_dump_json())
-
 
         audio_data = await tts_module.text_to_speech_block(payload.event_data)
         audio_data.message_id = message_id
@@ -320,3 +352,9 @@ class WebSocketServerHandler(BaseHandler):
             print("[服务器] WebSocket 服务器已关闭。")
         else:
             print("[服务器] 没有活动的 WebSocket 服务器可关闭。")
+
+    def handle_audio(self, raw_message: bytes, metadata):
+        session_id = metadata["session_id"]
+        if session_id and session_id in self.audio_consumers:
+            consumer = self.audio_consumers[session_id]
+            consumer.process_chunk(raw_message)

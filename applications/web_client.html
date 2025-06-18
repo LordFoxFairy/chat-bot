@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>智能對話助手 (修復版)</title>
+    <title>智能對話助手 (支持雙模式音頻流)</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 marked.js 库用于 Markdown 渲染 -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -93,41 +92,16 @@
             font-size: 0.875rem;
             word-wrap: break-word;
         }
-        .status-activation {
-            font-weight: bold;
-        }
-        .status-info {
-            background-color: #eff6ff;
-            color: #3b82f6;
-        }
-        .status-success {
-            background-color: #f0fdf4;
-            color: #22c55e;
-        }
-        .status-error {
-            background-color: #fef2f2;
-            color: #ef4444;
-        }
-        .hidden {
-            display: none;
-        }
-        h1 {
-            font-size: 1.75rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            text-align: center;
-            color: #111827;
-        }
-        label {
-            display: block;
-            margin-bottom: 0.25rem;
-            font-weight: 500;
-            color: #4b5563;
-        }
+        .status-info { background-color: #eff6ff; color: #3b82f6; }
+        .status-success { background-color: #f0fdf4; color: #22c55e; }
+        .status-error { background-color: #fef2f2; color: #ef4444; }
+        .hidden { display: none; }
+        h1 { font-size: 1.75rem; font-weight: 600; margin-bottom: 1rem; text-align: center; color: #111827; }
+        label { display: block; margin-bottom: 0.25rem; font-weight: 500; color: #4b5563; }
 
         /* 聊天区域和消息气泡样式 */
         #chatArea {
-            flex-grow: 1; /* 让聊天区域占据剩余空间 */
+            flex-grow: 1;
             overflow-y: auto;
             border: 1px solid #e5e7eb;
             padding: 1rem;
@@ -137,39 +111,13 @@
             display: flex;
             flex-direction: column;
         }
-        .message-container {
-            display: flex;
-            margin-bottom: 0.75rem;
-            width: 100%;
-        }
-        .message-container.user {
-            justify-content: flex-end;
-        }
-        .message-container.bot {
-            justify-content: flex-start;
-        }
-        .message-container.system {
-            justify-content: center;
-        }
-        .message-bubble {
-            max-width: 85%;
-            padding: 0.75rem 1.125rem;
-            border-radius: 1.25rem;
-            word-wrap: break-word;
-            position: relative;
-            font-size: 0.9rem;
-            line-height: 1.5;
-        }
-        .message-bubble.user {
-            background-color: #2563eb;
-            color: white;
-            border-bottom-right-radius: 0.375rem;
-        }
-        .message-bubble.bot {
-            background-color: #e5e7eb;
-            color: #1f2937;
-            border-bottom-left-radius: 0.375rem;
-        }
+        .message-container { display: flex; margin-bottom: 0.75rem; width: 100%; }
+        .message-container.user { justify-content: flex-end; }
+        .message-container.bot { justify-content: flex-start; }
+        .message-container.system { justify-content: center; }
+        .message-bubble { max-width: 85%; padding: 0.75rem 1.125rem; border-radius: 1.25rem; word-wrap: break-word; position: relative; font-size: 0.9rem; line-height: 1.5; }
+        .message-bubble.user { background-color: #2563eb; color: white; border-bottom-right-radius: 0.375rem; }
+        .message-bubble.bot { background-color: #e5e7eb; color: #1f2937; border-bottom-left-radius: 0.375rem; }
         /* Markdown 渲染后的基本样式 */
         .message-text p:last-child { margin-bottom: 0; }
         .message-text ul, .message-text ol { padding-left: 1.5em; margin: 0.5em 0; }
@@ -225,6 +173,7 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-stop-fill" viewBox="0 0 16 16"><path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5"/></svg>
                 </button>
             </div>
+            <div id="audioPlaybackStatus" class="status status-info mt-2 text-center">播放器: 空閒</div>
         </div>
     </div>
 
@@ -241,25 +190,75 @@
         const stopRecordButton = document.getElementById('stopRecordButton');
         const statusArea = document.getElementById('statusArea');
         const chatArea = document.getElementById('chatArea');
+        const audioPlaybackStatus = document.getElementById('audioPlaybackStatus');
 
         // Global State
         let websocket = null;
         let micAudioContext = null;
         let mediaStream = null;
         let audioWorkletNode = null;
+        let serverPlaybackAudioContext = null;
+        let mainAccumulatedPcmData = new Float32Array(0);
+        let isServerAudioPlaying = false;
+        let currentSourceNode = null;
+        let nextChunkPlayTime = 0;
         let currentBotMessageBubble = null;
         let currentFullMarkdownText = '';
         const clientTagId = 'web_client_tag_' + Math.random().toString(36).substr(2, 5);
 
         // Constants
+        const TARGET_AUDIO_SAMPLE_RATE = 16000;
         const EventType = {
-            CLIENT_AUDIO_CHUNK: "CLIENT_AUDIO_CHUNK",
             CLIENT_TEXT_INPUT: "CLIENT_TEXT_INPUT",
             SERVER_TEXT_RESPONSE: "SERVER_TEXT_RESPONSE",
+            SERVER_AUDIO_RESPONSE: "SERVER_AUDIO_RESPONSE",
             SERVER_SYSTEM_MESSAGE: "SERVER_SYSTEM_MESSAGE",
             SYSTEM_CLIENT_SESSION_START: "SYSTEM_CLIENT_SESSION_START",
             SYSTEM_SERVER_SESSION_START: "SYSTEM_SERVER_SESSION_START",
         };
+
+        // --- AudioWorklet Code (Simplified for direct binary streaming) ---
+        const audioProcessorCode = `
+            class AudioStreamerProcessor extends AudioWorkletProcessor {
+                constructor(options) {
+                    super(options);
+                    this.inputSampleRate = options.processorOptions.inputSampleRate;
+                    this.outputSampleRate = options.processorOptions.outputSampleRate;
+                    this.resampleRatio = this.inputSampleRate / this.outputSampleRate;
+                    this.port.onmessage = (event) => {}; // Keep port open
+                }
+
+                resample(inputSamples) {
+                    if (this.resampleRatio === 1) return inputSamples;
+                    const outputSamples = [];
+                    for (let i = 0; i < inputSamples.length / this.resampleRatio; i++) {
+                        const index = i * this.resampleRatio;
+                        const floor = Math.floor(index);
+                        const ceil = Math.ceil(index);
+                        if (ceil < inputSamples.length) {
+                            const value = inputSamples[floor] + (inputSamples[ceil] - inputSamples[floor]) * (index - floor);
+                            outputSamples.push(value);
+                        }
+                    }
+                    return new Float32Array(outputSamples);
+                }
+
+                process(inputs, outputs, parameters) {
+                    const inputChannelData = inputs[0]?.[0];
+                    if (!inputChannelData) return true;
+
+                    const resampled = this.resample(inputChannelData);
+
+                    if (resampled.length > 0) {
+                         // Post the raw PCM data back to the main thread
+                         this.port.postMessage(resampled.buffer, [resampled.buffer]);
+                    }
+
+                    return true;
+                }
+            }
+            registerProcessor('audio-streamer-processor', AudioStreamerProcessor);
+        `;
 
         // --- Core Functions ---
 
@@ -275,14 +274,8 @@
             return newUuid;
         }
 
-        // Marked.js options (modern and secure)
-        marked.setOptions({
-            gfm: true,
-            breaks: true,
-            pedantic: false
-        });
+        marked.setOptions({ gfm: true, breaks: true, pedantic: false });
 
-        // Finalize previous bot message rendering and state
         function finalizePreviousBotMessage() {
             if (currentBotMessageBubble && currentFullMarkdownText) {
                 const messageTextDiv = currentBotMessageBubble.querySelector('.message-text');
@@ -294,97 +287,120 @@
             currentFullMarkdownText = '';
         }
 
-        // Append a message to the chat display
-        function appendMessageToDisplay(text, type, isFinal = true) {
-            // If this is a new message from user/system, finalize any ongoing bot message
-            if (type !== 'bot') {
-                finalizePreviousBotMessage();
-            }
+        function updateAudioPlaybackStatus(message) {
+            audioPlaybackStatus.textContent = `播放器: ${message}`;
+        }
 
-            // For bot messages, handle streaming
+        function appendMessageToDisplay(text, type, isFinal = true) {
+            if (type !== 'bot') finalizePreviousBotMessage();
+
             if (type === 'bot') {
-                // If it's a new bot message stream, create a new bubble
                 if (!currentBotMessageBubble) {
                     const messageContainer = document.createElement('div');
                     messageContainer.classList.add('message-container', 'bot');
-
                     const bubble = document.createElement('div');
                     bubble.classList.add('message-bubble', 'bot');
-
                     const messageTextDiv = document.createElement('div');
-                    messageTextDiv.classList.add('message-text'); // Use a div for block elements
+                    messageTextDiv.classList.add('message-text');
                     bubble.appendChild(messageTextDiv);
-
-                    // *** CRITICAL FIX 1: Append bubble to container ***
                     messageContainer.appendChild(bubble);
                     chatArea.appendChild(messageContainer);
-
                     currentBotMessageBubble = bubble;
                     currentFullMarkdownText = '';
                 }
-
-                // Append new text chunk and re-render Markdown
                 currentFullMarkdownText += text;
                 const messageTextDiv = currentBotMessageBubble.querySelector('.message-text');
-                if (messageTextDiv) {
-                    // *** CRITICAL FIX 2: Render Markdown in real-time ***
-                    messageTextDiv.innerHTML = marked.parse(currentFullMarkdownText);
-                }
-
-                // If this is the final chunk, reset state for the next message
+                if (messageTextDiv) messageTextDiv.innerHTML = marked.parse(currentFullMarkdownText);
                 if (isFinal) {
                     currentBotMessageBubble = null;
                     currentFullMarkdownText = '';
                 }
-
-            } else { // For user and system messages, create and append directly
+            } else {
                 const messageContainer = document.createElement('div');
                 messageContainer.classList.add('message-container', type);
-
                 const bubble = document.createElement('div');
                 bubble.classList.add('message-bubble', type);
                 bubble.textContent = text;
-
-                // *** CRITICAL FIX 1: Append bubble to container ***
                 messageContainer.appendChild(bubble);
                 chatArea.appendChild(messageContainer);
             }
-
-            // Scroll to the bottom
             chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        async function initializeServerPlaybackAudioContext() {
+            if (serverPlaybackAudioContext && serverPlaybackAudioContext.state !== 'closed') return;
+            try {
+                serverPlaybackAudioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: TARGET_AUDIO_SAMPLE_RATE });
+                if (serverPlaybackAudioContext.state === 'suspended') await serverPlaybackAudioContext.resume();
+                updateAudioPlaybackStatus("已準備");
+            } catch (e) {
+                updateAudioPlaybackStatus(`錯誤: ${e.message}`);
+            }
+        }
+
+        function playNextLargeAudioChunk() {
+            if (isServerAudioPlaying || !serverPlaybackAudioContext) return;
+            const accumulatedDuration = mainAccumulatedPcmData.length / TARGET_AUDIO_SAMPLE_RATE;
+            if (accumulatedDuration < 0.1) return;
+            isServerAudioPlaying = true;
+
+            const samplesToPlay = mainAccumulatedPcmData.length;
+            const pcmChunkToPlay = mainAccumulatedPcmData.slice(0, samplesToPlay);
+            mainAccumulatedPcmData = mainAccumulatedPcmData.slice(samplesToPlay);
+
+            const audioBufferToPlay = serverPlaybackAudioContext.createBuffer(1, pcmChunkToPlay.length, TARGET_AUDIO_SAMPLE_RATE);
+            audioBufferToPlay.getChannelData(0).set(pcmChunkToPlay);
+
+            currentSourceNode = serverPlaybackAudioContext.createBufferSource();
+            currentSourceNode.buffer = audioBufferToPlay;
+            currentSourceNode.connect(serverPlaybackAudioContext.destination);
+            currentSourceNode.onended = () => {
+                isServerAudioPlaying = false;
+                currentSourceNode = null;
+                if (mainAccumulatedPcmData.length > 0) playNextLargeAudioChunk();
+                else updateAudioPlaybackStatus("空閒");
+            };
+
+            let scheduledPlayTime = nextChunkPlayTime;
+            if (scheduledPlayTime < serverPlaybackAudioContext.currentTime) scheduledPlayTime = serverPlaybackAudioContext.currentTime;
+
+            updateAudioPlaybackStatus(`正在播放...`);
+            currentSourceNode.start(scheduledPlayTime);
+            nextChunkPlayTime = scheduledPlayTime + audioBufferToPlay.duration;
         }
 
         function connectWebSocket() {
             const wsUrl = wsUrlInput.value;
-            if (websocket && websocket.readyState === WebSocket.OPEN) {
-                updateStatus('已連接', 'info');
-                return;
-            }
+            if (websocket && websocket.readyState === WebSocket.OPEN) return;
 
             updateStatus('正在連接...', 'info');
             websocket = new WebSocket(wsUrl);
+            websocket.binaryType = "arraybuffer";
 
-            websocket.onopen = () => {
+            websocket.onopen = async () => {
                 updateStatus('連接成功', 'success');
                 connectButton.classList.add('hidden');
                 disconnectButton.classList.remove('hidden');
                 sendTextButton.disabled = false;
                 startRecordButton.disabled = false;
                 textInput.placeholder = "請輸入消息...";
+                await initializeServerPlaybackAudioContext();
 
-                // Send session start message
                 const initMessage = {
                     event_type: EventType.SYSTEM_CLIENT_SESSION_START,
                     tag_id: clientTagId,
-                    event_data: { client_type: "web_client_fixed" },
+                    event_data: { client_type: "web_client_binary_stream" },
                     session_id: clientSessionIdInput.value
                 };
                 websocket.send(JSON.stringify(initMessage));
                 appendMessageToDisplay(`已發送會話初始化請求 (ID: ${clientSessionIdInput.value})`, 'system');
             };
 
-            websocket.onmessage = (event) => {
+            // *** UPDATED: Added comments to clarify dual-mode handling ***
+            websocket.onmessage = async (event) => {
+                // PATH 1: Handle JSON-based text, commands, and Base64 audio events
                 if (typeof event.data === 'string') {
+                    console.log("[WebSocket] Received String (JSON) message.");
                     try {
                         const jsonData = JSON.parse(event.data);
                         const eventType = jsonData.event_type;
@@ -400,26 +416,52 @@
                             case EventType.SERVER_TEXT_RESPONSE:
                                 appendMessageToDisplay(eventData.text || '', 'bot', eventData.is_final);
                                 break;
-                            case EventType.SERVER_SYSTEM_MESSAGE:
-                                appendMessageToDisplay(eventData.message || '系統消息', 'system');
-                                break;
-                            default:
-                                console.warn(`收到未知事件類型: ${eventType}`, jsonData);
+                            case EventType.SERVER_AUDIO_RESPONSE:
+                                if (eventData && typeof eventData.data === 'string') {
+                                    // This handles audio sent as a Base64 string within a JSON object
+                                    console.log(`[WebSocket] Handling Base64 audio from JSON event...`);
+                                    try {
+                                        const binaryString = atob(eventData.data);
+                                        const len = binaryString.length;
+                                        const bytes = new Uint8Array(len);
+                                        for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+                                        const audioArrayBuffer = bytes.buffer;
+
+                                        // Feed the decoded binary data into the standard playback pipeline
+                                        if (!serverPlaybackAudioContext) await initializeServerPlaybackAudioContext();
+                                        const decodedAudioBuffer = await serverPlaybackAudioContext.decodeAudioData(audioArrayBuffer);
+                                        const pcmData = decodedAudioBuffer.getChannelData(0);
+                                        const newBuffer = new Float32Array(mainAccumulatedPcmData.length + pcmData.length);
+                                        newBuffer.set(mainAccumulatedPcmData);
+                                        newBuffer.set(pcmData, mainAccumulatedPcmData.length);
+                                        mainAccumulatedPcmData = newBuffer;
+                                        playNextLargeAudioChunk();
+                                    } catch(e) { console.error("處理 Base64 音頻數據時出錯:", e); }
+                                }
                                 break;
                         }
-                    } catch (e) {
-                        console.error("解析伺服器消息失敗:", e);
-                        appendMessageToDisplay(`收到無法解析的文本: ${event.data}`, 'system');
-                    }
-                } else {
-                    // Placeholder for audio data handling
-                    console.log("收到二進制音頻數據");
-                }
-            };
+                    } catch (e) { console.error("解析伺服器 JSON 消息失敗:", e, event.data); }
 
-            websocket.onerror = (error) => {
-                console.error('WebSocket 錯誤:', error);
-                updateStatus('連接錯誤', 'error');
+                // PATH 2: Handle raw binary audio messages directly
+                } else if (event.data instanceof ArrayBuffer) {
+                    console.log(`[WebSocket] Received raw ArrayBuffer (binary audio) message. Size: ${event.data.byteLength} bytes.`);
+                    if (!serverPlaybackAudioContext) await initializeServerPlaybackAudioContext();
+                    try {
+                        // This assumes the ArrayBuffer is a complete audio file chunk (like a WAV)
+                        // that decodeAudioData can understand.
+                        const decodedAudioBuffer = await serverPlaybackAudioContext.decodeAudioData(event.data);
+                        const pcmData = decodedAudioBuffer.getChannelData(0);
+
+                        // Add the decoded PCM data to our playback buffer
+                        const newBuffer = new Float32Array(mainAccumulatedPcmData.length + pcmData.length);
+                        newBuffer.set(mainAccumulatedPcmData);
+                        newBuffer.set(pcmData, mainAccumulatedPcmData.length);
+                        mainAccumulatedPcmData = newBuffer;
+
+                        // Trigger the playback logic
+                        playNextLargeAudioChunk();
+                    } catch(e) { console.error("直接二進位音頻解碼失敗:", e); }
+                }
             };
 
             websocket.onclose = () => {
@@ -429,23 +471,69 @@
                 disconnectButton.classList.add('hidden');
                 sendTextButton.disabled = true;
                 startRecordButton.disabled = true;
-                stopRecordButton.classList.add('hidden');
-                startRecordButton.classList.remove('hidden');
-                textInput.placeholder = "請先連接伺服器...";
+                stopRecording(false);
                 finalizePreviousBotMessage();
             };
         }
 
-        function disconnectWebSocket() {
-            if (websocket) {
-                websocket.close();
+        function disconnectWebSocket() { if (websocket) websocket.close(); }
+
+        async function startRecording() {
+            if (mediaStream) return;
+            startRecordButton.classList.add('hidden');
+            stopRecordButton.classList.remove('hidden');
+            try {
+                micAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const source = micAudioContext.createMediaStreamSource(mediaStream);
+                const audioWorkletUrl = URL.createObjectURL(new Blob([audioProcessorCode], { type: 'application/javascript' }));
+                await micAudioContext.audioWorklet.addModule(audioWorkletUrl);
+                audioWorkletNode = new AudioWorkletNode(micAudioContext, 'audio-streamer-processor', {
+                    processorOptions: { inputSampleRate: micAudioContext.sampleRate, outputSampleRate: TARGET_AUDIO_SAMPLE_RATE }
+                });
+
+                audioWorkletNode.port.onmessage = (event) => {
+                    // The event.data is now a raw ArrayBuffer (Float32Array's buffer)
+                    const pcmFloat32Data = event.data;
+
+                    // Convert Float32 PCM to Int16 PCM for transport
+                    const pcmInt16 = new Int16Array(pcmFloat32Data.byteLength / 4);
+                    const view = new DataView(pcmFloat32Data);
+                    for (let i = 0; i < pcmInt16.length; i++) {
+                        const float = view.getFloat32(i * 4, true); // Little-endian
+                        pcmInt16[i] = Math.max(-32768, Math.min(32767, float * 32767));
+                    }
+
+                    if (websocket && websocket.readyState === WebSocket.OPEN) {
+                        // Send the raw binary data (the buffer of the Int16Array)
+                        websocket.send(pcmInt16.buffer);
+                    }
+                };
+                source.connect(audioWorkletNode);
+                appendMessageToDisplay('開始錄音...', 'system');
+            } catch (err) {
+                console.error("麥克風訪問失敗:", err);
+                appendMessageToDisplay(`麥克風錯誤: ${err.message}`, 'system');
+                stopRecording(false);
             }
+        }
+
+        function stopRecording(sendEndSignal = true) {
+            if (mediaStream) mediaStream.getTracks().forEach(track => track.stop());
+            if (micAudioContext) micAudioContext.close();
+            mediaStream = null;
+            micAudioContext = null;
+            audioWorkletNode = null;
+            startRecordButton.classList.remove('hidden');
+            stopRecordButton.classList.add('hidden');
         }
 
         // Event Listeners
         connectButton.onclick = connectWebSocket;
         disconnectButton.onclick = disconnectWebSocket;
         generateUuidButton.onclick = generateAndSetUuid;
+        startRecordButton.onclick = startRecording;
+        stopRecordButton.onclick = stopRecording;
 
         sendTextButton.onclick = () => {
             const text = textInput.value.trim();
@@ -461,9 +549,7 @@
                 textInput.value = '';
             }
         };
-
-        // Allow sending with Enter key
-        textInput.addEventListener('keypress', function(e) {
+        textInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendTextButton.click();
@@ -472,7 +558,6 @@
 
         // Initialize
         clientSessionIdInput.value = localStorage.getItem('clientSessionIdForChatbot') || generateAndSetUuid();
-
     </script>
 </body>
 </html>
