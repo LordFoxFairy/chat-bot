@@ -258,7 +258,6 @@
 #     # 例如，如果 tests 目录与 chat-bot 目录同级，则 CHAT_BOT_ROOT 应该是 'chat-bot'
 #     # 如果 tests 在 chat-bot 内部，则 CHAT_BOT_ROOT 应该是 chat-bot 的父目录的 chat-bot 子目录，即 chat-bot 本身
 #
-#     # 修正路径，假设此脚本位于 chat-bot/tests/adapters/llm/
 #     # 则 CHAT_BOT_ROOT 应该是 chat-bot/
 #     # current_file_dir = os.path.dirname(os.path.abspath(__file__)) # .../chat-bot/tests/adapters/llm
 #     # adapters_dir = os.path.dirname(current_file_dir) # .../chat-bot/tests/adapters

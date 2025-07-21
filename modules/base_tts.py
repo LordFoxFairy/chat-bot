@@ -24,7 +24,7 @@ class BaseTTS(BaseModule):  # 假設 BaseModule 是正確的基類
                  config: Optional[Dict[str, Any]] = None,
                  event_loop: Optional[asyncio.AbstractEventLoop] = None, ):
 
-        super().__init__(module_id, config, event_loop)  # 修正了 module_name 的傳遞
+        super().__init__(module_id, config, event_loop)
 
         # 優先使用 'enable_module'，如果不存在則嘗試 'adapter_type'
         # 如果 YAML 中 'adapter_type' 在頂層，而 'enable_module' 在 'config' 內部，這裡的邏輯可能需要調整

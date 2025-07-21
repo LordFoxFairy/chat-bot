@@ -9,26 +9,27 @@ from data_models import AudioData, TextData
 
 class EventType(str, Enum):
     """
-    事件类型枚举。用于标识系统中可能发生的各类事件。
+    定义了所有在系统中流转的事件类型。
     """
+    # 客户端发起的事件
+    CLIENT_TEXT_INPUT = "CLIENT_TEXT_INPUT"
+    SYSTEM_CLIENT_SESSION_START = "SYSTEM_CLIENT_SESSION_START"
+    CLIENT_SPEECH_END = "CLIENT_SPEECH_END"  # 由前端VAD检测到语音结束时发送
+    STREAM_END = "STREAM_END"  # 由前端在停止录音或断开连接时发送
 
-    # 客户端 -> 服务端
-    CLIENT_AUDIO_CHUNK = "客户端音频流"
-    CLIENT_AUDIO_BLOCK = "客户端完整音频"
-    CLIENT_TEXT_INPUT = "CLIENT_TEXT_INPUT"  # 客户端文本输入
+    # 服务器发起的事件
+    SERVER_TEXT_RESPONSE = "SERVER_TEXT_RESPONSE"
+    SERVER_AUDIO_RESPONSE = "SERVER_AUDIO_RESPONSE"
+    SERVER_SYSTEM_MESSAGE = "SERVER_SYSTEM_MESSAGE"
+    SYSTEM_SERVER_SESSION_START = "SYSTEM_SERVER_SESSION_START"
 
-    # 服务端 -> 客户端
-    SERVER_TEXT_RESPONSE = "SERVER_TEXT_RESPONSE"  # 服务端文本回复
-    SERVER_AUDIO_RESPONSE = "SERVER_AUDIO_RESPONSE" # 服务端音频回复
-    SERVER_SPEECH_STATE = "SERVER_SPEECH_STATE" # 服务端语音状态
-    SERVER_SYSTEM_MESSAGE = "SERVER_SYSTEM_MESSAGE" # 服务端系统消息
-    SERVER_ERROR_MESSAGE = "SERVER_ERROR_MESSAGE" # 服务端错误消息
-    SERVER_SESSION_UPDATE = "服务端会话更新"
-    SERVER_MODULE_STATE = "服务端模块状态"
+    # 新增：用于实时显示ASR（语音识别）结果的事件
+    ASR_UPDATE = "ASR_UPDATE"
 
-    # 注冊事件
-    SYSTEM_CLIENT_SESSION_START = "SYSTEM_CLIENT_SESSION_START"  # 系统会话申請注冊
-    SYSTEM_SERVER_SESSION_START = "SYSTEM_SERVER_SESSION_START"  # 系统会话注冊成功
+    # 内部事件（可选，但有助于区分）
+    ASR_RESULT = "asr_result"  # AudioConsumer 内部处理完成的事件
+    LLM_START = "llm_start"  # 通知客户端LLM开始思考
+    LLM_RESPONSE = "llm_response"  # LLM的流式文本响应
 
 
 class StreamState(str, Enum):
@@ -50,6 +51,8 @@ class StreamEvent(BaseModel):
     tag_id: Optional[str] = Field(default=None)
     session_id: Optional[str] = Field(default=None)
     timestamp: float = Field(default_factory=time.time)
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="其他元数据")
+
 
     @model_validator(mode='before')
     @classmethod
