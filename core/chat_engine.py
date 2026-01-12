@@ -75,13 +75,6 @@ class ChatEngine:
                         existing_modules=self.common_modules,
                     )
 
-            # 创建全局 SessionContext
-            context = SessionContext()
-            context.global_module_manager = self
-            context.tag_id = constant.CHAT_ENGINE_NAME
-            context.session_id = constant.CHAT_ENGINE_NAME
-            session_manager.create_session(context)
-
             # 初始化协议模块 (Protocols)
             protocol_config = module_configs.get("protocols")
             if protocol_config:

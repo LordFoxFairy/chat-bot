@@ -1,9 +1,12 @@
 from typing import Optional, Protocol
 
 from cachetools import LRUCache
+from utils.logging_setup import logger
 
 
 class StorageBackend(Protocol):
+    """存储后端协议"""
+
     def get(self, key: str) -> Optional['SessionContext']: ...
 
     def set(self, key: str, value: 'SessionContext'): ...
@@ -11,14 +14,12 @@ class StorageBackend(Protocol):
     def close(self): ...
 
 
-# --- 存儲策略實現 (讓它們自己處理序列化) ---
-
 class InMemoryStorage(StorageBackend):
-    """內存存儲：直接存儲 SessionContext 物件，無需任何轉換。"""
+    """内存存储：使用 LRU 缓存"""
 
     def __init__(self, maxsize: int = 256):
         self._cache = LRUCache(maxsize=maxsize)
-        print(f"[Storage] InMemory (cachetools) backend is active. Max size: {maxsize}")
+        logger.info(f"[SessionStorage] 内存存储初始化，最大容量: {maxsize}")
 
     def get(self, key: str) -> Optional['SessionContext']:
         return self._cache.get(key)
@@ -27,33 +28,36 @@ class InMemoryStorage(StorageBackend):
         self._cache[key] = value
 
     def close(self):
-        print("[Storage] InMemory storage has nothing to close.")
+        logger.info("[SessionStorage] 关闭内存存储")
 
-
-# --- 第三部分：極簡化後的 SessionManager ---
 
 class SessionManager:
-    """
-    一個邏輯純粹的會話管理器，完全不關心存儲和序列化的細節。
+    """会话管理器
+
+    职责:
+    - 管理所有会话的生命周期
+    - 提供会话的 CRUD 操作
+    - 通过 session_id 作为 key 访问会话
     """
 
     def __init__(self, storage_backend: StorageBackend):
         self.storage = storage_backend
 
     def create_session(self, context: 'SessionContext') -> 'SessionContext':
-        """創建會話，直接將物件交給後端處理。"""
+        """创建会话"""
         self.storage.set(context.session_id, context)
-        print(f"[Manager] 已將會話 {context.session_id} 交給後端存儲。")
+        logger.info(f"[SessionManager] 创建会话: {context.session_id}")
         return context
 
     def get_session(self, session_id: str) -> Optional['SessionContext']:
-        """從後端獲取會話物件。"""
-        # print(f"[Manager] 正在從後端查找會話: {session_id}")
+        """获取会话"""
         return self.storage.get(session_id)
 
     def close(self):
+        """关闭存储"""
         self.storage.close()
 
 
+# 全局 session_manager 实例
 in_memory_backend = InMemoryStorage(maxsize=10000)
 session_manager = SessionManager(storage_backend=in_memory_backend)

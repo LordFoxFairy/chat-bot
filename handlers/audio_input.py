@@ -39,17 +39,17 @@ class AudioInputHandler:
     def __init__(
         self,
         session_context: SessionContext,
-        vad_module: BaseVAD,
-        asr_module: BaseASR,
         result_callback: Callable[[StreamEvent, dict], Awaitable[None]],
         silence_timeout: float = DEFAULT_SILENCE_TIMEOUT,
         max_buffer_duration: float = DEFAULT_MAX_BUFFER_DURATION,
         min_segment_threshold: float = DEFAULT_MIN_SEGMENT_THRESHOLD
     ):
         self.session_context = session_context
-        self.vad_module = vad_module
-        self.asr_module = asr_module
         self.result_callback = result_callback
+
+        # 从 session 获取模块（支持会话级隔离）
+        self.vad_module = session_context.get_module("vad")
+        self.asr_module = session_context.get_module("asr")
 
         # 配置
         self.silence_timeout = silence_timeout

@@ -51,24 +51,18 @@ class ConversationHandler:
         logger.info(f"ConversationHandler 创建: session={session_id}")
 
     async def start(self):
-        """启动对话处理器 - 创建 SessionContext 和 AudioStreamProcessor"""
+        """启动对话处理器 - 创建 SessionContext 和 AudioInputHandler"""
         # 创建 SessionContext
-        session_ctx = SessionContext()
-        session_ctx.session_id = self.session_id
-        session_ctx.tag_id = self.tag_id
-        session_ctx.global_module_manager = self.chat_engine
+        session_ctx = SessionContext(
+            session_id=self.session_id,
+            tag_id=self.tag_id,
+            engine=self.chat_engine
+        )
         session_manager.create_session(session_ctx)
 
-        # 获取模块
-        context = session_manager.get_session(constant.CHAT_ENGINE_NAME)
-        vad_module: BaseVAD = context.global_module_manager.get_module("vad")
-        asr_module: BaseASR = context.global_module_manager.get_module("asr")
-
-        # 创建 AudioInputHandler
+        # 创建 AudioInputHandler（会从 session_ctx 获取模块）
         self.audio_input = AudioInputHandler(
             session_context=session_ctx,
-            vad_module=vad_module,
-            asr_module=asr_module,
             result_callback=self._on_asr_result,
             silence_timeout=self.DEFAULT_SILENCE_TIMEOUT,
             max_buffer_duration=self.DEFAULT_MAX_BUFFER_DURATION,
@@ -160,10 +154,10 @@ class ConversationHandler:
 
     async def _trigger_conversation(self, user_text: str):
         """触发对话流程: LLM → TTS"""
-        # 获取模块
-        context = session_manager.get_session(constant.CHAT_ENGINE_NAME)
-        llm_module: BaseLLM = context.global_module_manager.get_module("llm")
-        tts_module: BaseTTS = context.global_module_manager.get_module("tts")
+        # 从当前会话获取模块
+        session_ctx = session_manager.get_session(self.session_id)
+        llm_module: BaseLLM = session_ctx.get_module("llm")
+        tts_module: BaseTTS = session_ctx.get_module("tts")
 
         if not llm_module:
             logger.error(f"ConversationHandler LLM 模块未找到: session={self.session_id}")
