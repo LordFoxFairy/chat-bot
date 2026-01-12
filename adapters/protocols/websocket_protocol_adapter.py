@@ -3,7 +3,6 @@ from typing import Optional, Dict, Tuple
 import websockets
 from websockets.server import WebSocketServerProtocol
 
-from core.conversation_handler import ConversationHandler
 from data_models import StreamEvent, EventType
 from modules.base_protocol import BaseProtocol
 from utils.logging_setup import logger
@@ -15,8 +14,8 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
     职责:
     - 管理 WebSocket 连接
     - 接收/发送消息
-    - 为每个连接创建 ConversationHandler
-    - 不处理业务逻辑（由 ConversationHandler 负责）
+    - 调用 ChatEngine 创建/销毁 ConversationHandler
+    - 纯传输层，不包含业务逻辑
     """
 
     def __init__(self, module_id: str, config: Dict, chat_engine: 'ChatEngine'):
@@ -24,9 +23,6 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
 
         self.chat_engine = chat_engine
         self.server: Optional[websockets.WebSocketServer] = None
-
-        # 会话处理器
-        self.conversation_handlers: Dict[str, ConversationHandler] = {}
 
         logger.info(
             f"Protocol/WebSocket [{self.module_id}] 配置加载完成: "
@@ -62,7 +58,7 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
         """关闭协议，释放资源"""
         logger.info(f"Protocol/WebSocket [{self.module_id}] 正在关闭...")
         await self.stop()
-        await self._cleanup_all_handlers()
+        await self._cleanup_all_sessions()
         self._is_ready = False
         self._is_initialized = False
         logger.info(f"Protocol/WebSocket [{self.module_id}] 已关闭")
@@ -117,16 +113,12 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
             # 使用基类方法创建会话映射
             session_id = self.create_session(websocket, tag_id)
 
-            # 创建 ConversationHandler
-            handler = ConversationHandler(
+            # 通过 ChatEngine 创建 ConversationHandler
+            await self.chat_engine.create_conversation_handler(
                 session_id=session_id,
                 tag_id=tag_id,
-                chat_engine=self.chat_engine,
                 send_callback=lambda event: self.send_event(session_id, event)
             )
-            await handler.start()
-
-            self.conversation_handlers[session_id] = handler
 
             # 发送会话确认
             assignment_message = StreamEvent(
@@ -150,7 +142,7 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
             return None, None
 
     async def _cleanup_handler(self, websocket: WebSocketServerProtocol):
-        """清理会话处理器"""
+        """清理会话"""
         # 使用基类方法移除会话映射
         session_id = self.remove_session_by_connection(websocket)
         if not session_id:
@@ -160,19 +152,19 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
             f"Protocol/WebSocket [{self.module_id}] 清理会话: {session_id}"
         )
 
-        # 停止并移除 ConversationHandler
-        handler = self.conversation_handlers.pop(session_id, None)
-        if handler:
-            await handler.stop()
+        # 通过 ChatEngine 销毁 ConversationHandler
+        await self.chat_engine.destroy_conversation_handler(session_id)
 
-    async def _cleanup_all_handlers(self):
-        """清理所有会话处理器"""
+    async def _cleanup_all_sessions(self):
+        """清理所有会话"""
         logger.info(f"Protocol/WebSocket [{self.module_id}] 清理所有会话")
 
-        for handler in self.conversation_handlers.values():
-            await handler.stop()
+        # 获取所有 session_id
+        session_ids = list(self.session_to_connection.keys())
 
-        self.conversation_handlers.clear()
+        # 通过 ChatEngine 销毁所有 ConversationHandler
+        for session_id in session_ids:
+            await self.chat_engine.destroy_conversation_handler(session_id)
 
         # 使用基类方法清理映射
         self.clear_all_sessions()
@@ -186,7 +178,7 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
                 return
 
             message_data = StreamEvent.model_validate_json(raw_message)
-            handler = self.conversation_handlers.get(session_id)
+            handler = self.chat_engine.get_conversation_handler(session_id)
 
             if not handler:
                 logger.warning(
@@ -224,7 +216,7 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
 
     def _handle_audio(self, audio_data: bytes, session_id: str):
         """处理音频数据 → 转发给 ConversationHandler"""
-        handler = self.conversation_handlers.get(session_id)
+        handler = self.chat_engine.get_conversation_handler(session_id)
 
         if not handler:
             logger.warning(
