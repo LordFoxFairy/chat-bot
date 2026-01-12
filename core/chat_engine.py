@@ -3,11 +3,20 @@ from typing import Dict, Any, Optional
 
 import constant
 from utils.logging_setup import logger
-from .manager.common_module_initializer import CommonModuleInitializer
-from .manager.handler_module_initializer import HandlerModuleInitializer
+from utils.module_initialization_utils import initialize_single_module_instance
 from .session_context import SessionContext
 from .session_manager import session_manager
 from .conversation_manager import ConversationManager
+
+# 导入模块工厂函数
+from adapters.asr.asr_factory import create_asr_adapter
+from adapters.llm.llm_factory import create_llm_adapter
+from adapters.tts.tts_factory import create_tts_adapter
+from adapters.vad.vad_factory import create_vad_adapter
+from adapters.protocols.protocol_factory import create_protocol_adapter
+
+from modules.base_module import BaseModule
+from modules.base_protocol import BaseProtocol
 
 
 class ChatEngine:
@@ -27,9 +36,9 @@ class ChatEngine:
         self.global_config = config
         self.loop = loop if loop else asyncio.get_event_loop()
 
-        # 模块管理器
-        self.module_manager = CommonModuleInitializer(config=self.global_config)
-        self.handler_manager = HandlerModuleInitializer(config=self.global_config)
+        # 模块存储
+        self.common_modules: Dict[str, BaseModule] = {}  # ASR, LLM, TTS, VAD
+        self.protocol_modules: Dict[str, BaseProtocol] = {}  # Protocols
 
         # 会话管理器
         self.conversation_manager = ConversationManager(chat_engine=self)
@@ -41,20 +50,49 @@ class ChatEngine:
         logger.info("ChatEngine 正在初始化模块...")
 
         try:
+            # 定义模块工厂
+            common_factories = {
+                "asr": create_asr_adapter,
+                "llm": create_llm_adapter,
+                "tts": create_tts_adapter,
+                "vad": create_vad_adapter,
+            }
+
+            # 获取模块配置
+            module_configs = self.global_config.get("modules", {})
+            if not module_configs:
+                logger.warning("配置中未找到 'modules'，将不会初始化任何模块。")
+                return
+
             # 初始化通用模块 (ASR, LLM, TTS, VAD)
-            await self.module_manager.initialize_modules()
+            for module_id, module_config in module_configs.items():
+                if module_id in common_factories:
+                    await initialize_single_module_instance(
+                        module_id=module_id,
+                        module_config=module_config,
+                        factory_dict=common_factories,
+                        base_class=BaseModule,
+                        existing_modules=self.common_modules,
+                    )
 
             # 创建全局 SessionContext
             context = SessionContext()
-            context.global_module_manager = self.module_manager
+            context.global_module_manager = self
             context.tag_id = constant.CHAT_ENGINE_NAME
             context.session_id = constant.CHAT_ENGINE_NAME
             session_manager.create_session(context)
 
-            # 初始化 Handler 模块 (Protocols) - 传递 ConversationManager
-            await self.handler_manager.initialize_modules(
-                conversation_manager=self.conversation_manager
-            )
+            # 初始化协议模块 (Protocols)
+            protocol_config = module_configs.get("protocols")
+            if protocol_config:
+                await initialize_single_module_instance(
+                    module_id="protocols",
+                    module_config=protocol_config,
+                    factory_dict={"protocols": create_protocol_adapter},
+                    base_class=BaseProtocol,
+                    existing_modules=self.protocol_modules,
+                    conversation_manager=self.conversation_manager
+                )
 
             logger.info("ChatEngine 模块初始化完成")
 
@@ -64,4 +102,4 @@ class ChatEngine:
 
     def get_module(self, module_name: str):
         """获取模块实例"""
-        return self.module_manager.get_module(module_name)
+        return self.common_modules.get(module_name)
