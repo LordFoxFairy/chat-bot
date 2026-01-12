@@ -1,7 +1,7 @@
 from typing import Dict, Optional, Callable, Union, Type
 
 from core.exceptions import ModuleInitializationError
-from modules.base_handler import BaseHandler
+from modules.base_protocol import BaseProtocol
 from modules.base_module import BaseModule
 from utils.logging_setup import logger
 
@@ -9,10 +9,10 @@ from utils.logging_setup import logger
 async def initialize_single_module_instance(
         module_id: str,
         module_config: dict,
-        factory_dict: Dict[str, Callable[..., Union[BaseModule, BaseHandler]]],
-        base_class: Union[Type[BaseModule], Type[BaseHandler]],
-        existing_modules: Dict[str, Union[BaseModule, BaseHandler]],
-) -> Optional[Union[BaseModule, BaseHandler]]:
+        factory_dict: Dict[str, Callable[..., Union[BaseModule, BaseProtocol]]],
+        base_class: Union[Type[BaseModule], Type[BaseProtocol]],
+        existing_modules: Dict[str, Union[BaseModule, BaseProtocol]],
+) -> Optional[Union[BaseModule, BaseProtocol]]:
     """
     通用函数，用于初始化单个模块实例。
     处理配置检查、工厂查找、实例创建、类型验证和错误捕获。
@@ -21,11 +21,11 @@ async def initialize_single_module_instance(
         module_id (str): 模块的唯一标识符。
         module_config (dict): 当前模块的配置。
         factory_dict (Dict[str, Callable]): 模块工厂函数的字典，用于创建模块实例。
-        base_class (Union[Type[BaseModule], Type[BaseHandler]]): 模块实例应继承的基类，用于类型检查。
-        existing_modules (Dict[str, Union[BaseModule, BaseHandler]]): 已加载模块的字典，用于检查重复。
+        base_class (Union[Type[BaseModule], Type[BaseProtocol]]): 模块实例应继承的基类，用于类型检查。
+        existing_modules (Dict[str, Union[BaseModule, BaseProtocol]]): 已加载模块的字典，用于检查重复。
 
     Returns:
-        Optional[Union[BaseModule, BaseHandler]]: 初始化成功的模块实例，失败则返回 None。
+        Optional[Union[BaseModule, BaseProtocol]]: 初始化成功的模块实例，失败则返回 None。
     """
     if not isinstance(module_config, dict):
         logger.error("模块 '%s' 的配置必须是 dict，实际为: %s", module_id, type(module_config).__name__)
@@ -43,7 +43,7 @@ async def initialize_single_module_instance(
     try:
         logger.info("初始化模块 '%s'...", module_id)
         # 调用工厂函数创建模块实例
-        module_instance: Union[BaseModule, BaseHandler] = factory(
+        module_instance: Union[BaseModule, BaseProtocol] = factory(
             module_id=module_id,
             config=module_config
         )

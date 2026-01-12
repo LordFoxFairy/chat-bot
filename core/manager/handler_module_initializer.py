@@ -1,8 +1,8 @@
 import asyncio
 from typing import Dict, Optional, Callable
 
-from adapters.handlers.handler_factory import create_input_handler
-from modules.base_handler import BaseHandler
+from adapters.protocols.protocol_factory import create_protocol_adapter
+from modules.base_protocol import BaseProtocol
 from utils.logging_setup import logger
 from utils.module_initialization_utils import initialize_single_module_instance
 
@@ -23,13 +23,13 @@ class HandlerModuleInitializer:
         """
         self.global_config = config
         self.event_loop = loop or asyncio.get_event_loop()
-        self.modules: Dict[str, BaseHandler] = {}  # 存储已加载的处理器模块实例
+        self.modules: Dict[str, BaseProtocol] = {}  # 存储已加载的协议模块实例
 
-        # 定义处理器模块的创建工厂函数字典
-        self.handler_factories: Dict[str, Callable[..., BaseHandler]] = {
-            "handlers": create_input_handler
+        # 定义协议模块的创建工厂函数字典
+        self.protocol_factories: Dict[str, Callable[..., BaseProtocol]] = {
+            "protocols": create_protocol_adapter
         }
-        logger.info("HandlerModuleInitializer 初始化完成，注册模块类型: %s", list(self.handler_factories.keys()))
+        logger.info("HandlerModuleInitializer 初始化完成，注册模块类型: %s", list(self.protocol_factories.keys()))
 
     async def initialize_modules(self):
         """
@@ -42,42 +42,27 @@ class HandlerModuleInitializer:
             logger.warning("配置中未找到 'modules'，将不会初始化任何模块。")
             return
 
-        handler_config = module_configs.get("handlers")
-        if handler_config:
-            # 对于 handlers 模块，我们假设只有一个顶层 "handlers" 配置，
-            # 里面包含各个 handler 的具体配置
-            # 调用通用的初始化工具函数
+        protocol_config = module_configs.get("protocols")
+        if protocol_config:
+            # 对于 protocols 模块，我们假设只有一个顶层 "protocols" 配置
             await initialize_single_module_instance(
-                module_id="handlers",  # 这里的 ID 保持为 "handlers"
-                module_config=handler_config,
-                factory_dict=self.handler_factories,
-                base_class=BaseHandler,
+                module_id="protocols",
+                module_config=protocol_config,
+                factory_dict=self.protocol_factories,
+                base_class=BaseProtocol,
                 existing_modules=self.modules
             )
         else:
-            logger.warning("配置中未找到 'handlers' 模块配置，将不会初始化任何处理器。")
+            logger.warning("配置中未找到 'protocols' 模块配置，将不会初始化任何协议。")
 
         logger.info("通信模块初始化完成，已加载模块: %s", list(self.modules.keys()))
 
-    def get_module(self, module_id: str) -> Optional[BaseHandler]:
-        """
-        获取指定 ID 的处理器模块实例。
-
-        Args:
-            module_id (str): 模块的唯一标识符。
-
-        Returns:
-            Optional[BaseHandler]: 模块实例，如果不存在则返回 None。
-        """
+    def get_module(self, module_id: str) -> Optional[BaseProtocol]:
+        """获取指定 ID 的协议模块实例"""
         return self.modules.get(module_id)
 
-    def get_all_modules(self) -> Dict[str, BaseHandler]:
-        """
-        获取所有已加载的处理器模块实例。
-
-        Returns:
-            Dict[str, BaseHandler]: 包含所有模块实例的字典。
-        """
+    def get_all_modules(self) -> Dict[str, BaseProtocol]:
+        """获取所有已加载的协议模块实例"""
         return self.modules
 
     async def shutdown_modules(self):
@@ -86,7 +71,7 @@ class HandlerModuleInitializer:
         """
         logger.info("正在关闭所有通信模块...")
         for module_id, module in self.modules.items():
-            module: BaseHandler
+            module: BaseProtocol
             try:
                 logger.info("关闭模块 '%s'...", module_id)
                 await module.close()

@@ -12,12 +12,12 @@ from core.session_context import SessionContext
 from core.session_manager import session_manager
 from data_models import StreamEvent, EventType, TextData
 from modules import BaseLLM, BaseTTS, BaseVAD, BaseASR
-from modules.base_handler import BaseHandler
+from modules.base_protocol import BaseProtocol
 from service.AudioConsumer import AudioConsumer
 from utils.logging_setup import logger
 
 
-class WebSocketServerHandler(BaseHandler):
+class WebSocketProtocolAdapter(BaseProtocol):
     def __init__(self, module_id, config):
         super().__init__(module_id, config)
         self.host = self.handler_config.get("host")
@@ -32,7 +32,7 @@ class WebSocketServerHandler(BaseHandler):
         # 新增：用于管理每个会话的对话轮次上下文
         self.session_turn_context: Dict[str, Dict] = {}
 
-        print(f"[服务器] WebSocketServerHandler 已初始化，监听地址: {self.host}:{self.port}")
+        print(f"[服务器] WebSocketProtocolAdapter 已初始化，监听地址: {self.host}:{self.port}")
 
     async def register(self, websocket):
         register_data = await websocket.recv()
