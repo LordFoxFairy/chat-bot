@@ -31,12 +31,12 @@ class HandlerModuleInitializer:
         }
         logger.info("HandlerModuleInitializer 初始化完成，注册模块类型: %s", list(self.protocol_factories.keys()))
 
-    async def initialize_modules(self, chat_engine: 'ChatEngine'):
+    async def initialize_modules(self, conversation_manager: 'ConversationManager'):
         """
         根据全局配置初始化所有通信模块（handlers）。
 
         Args:
-            chat_engine: ChatEngine 实例，用于访问模块和创建 ConversationHandler
+            conversation_manager: ConversationManager 实例，用于会话管理
         """
         logger.info("开始初始化所有通信模块...")
         module_configs = self.global_config.get("modules", {})
@@ -54,7 +54,7 @@ class HandlerModuleInitializer:
                 factory_dict=self.protocol_factories,
                 base_class=BaseProtocol,
                 existing_modules=self.modules,
-                chat_engine=chat_engine
+                conversation_manager=conversation_manager
             )
         else:
             logger.warning("配置中未找到 'protocols' 模块配置，将不会初始化任何协议。")

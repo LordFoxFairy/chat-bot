@@ -31,12 +31,12 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
         self,
         module_id: str,
         config: Dict[str, Any],
-        chat_engine: 'ChatEngine'
+        conversation_manager: 'ConversationManager'
     ):
         super().__init__(module_id, config)
 
-        # ChatEngine 引用
-        self.chat_engine = chat_engine
+        # ConversationManager 引用
+        self.conversation_manager = conversation_manager
 
         # 读取协议通用配置
         self.host = self.config.get("host", "0.0.0.0")
@@ -88,8 +88,8 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
         # 创建会话映射
         session_id = self.create_session(connection, tag_id)
 
-        # 调用 ChatEngine 创建 ConversationHandler
-        await self.chat_engine.create_conversation_handler(
+        # 调用 ConversationManager 创建 ConversationHandler
+        await self.conversation_manager.create_conversation_handler(
             session_id=session_id,
             tag_id=tag_id,
             send_callback=lambda event: self.send_event(session_id, event)
@@ -112,7 +112,7 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
             logger.warning(f"Protocol [{self.module_id}] 未找到会话映射")
             return
 
-        handler = self.chat_engine.get_conversation_handler(session_id)
+        handler = self.conversation_manager.get_conversation_handler(session_id)
         if not handler:
             logger.warning(f"Protocol [{self.module_id}] 会话处理器不存在: {session_id}")
             return
@@ -132,7 +132,7 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
         if not session_id:
             return
 
-        handler = self.chat_engine.get_conversation_handler(session_id)
+        handler = self.conversation_manager.get_conversation_handler(session_id)
         if handler:
             handler.handle_audio(audio_data)
 
@@ -141,7 +141,7 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
         session_id = self.remove_session_by_connection(connection)
         if session_id:
             logger.info(f"Protocol [{self.module_id}] 连接断开: session={session_id}")
-            await self.chat_engine.destroy_conversation_handler(session_id)
+            await self.conversation_manager.destroy_conversation_handler(session_id)
 
     # ==================== 通用会话管理 ====================
 

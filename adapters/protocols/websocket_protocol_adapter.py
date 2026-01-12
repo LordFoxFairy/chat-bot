@@ -17,8 +17,8 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
     - 纯传输层实现
     """
 
-    def __init__(self, module_id: str, config: Dict, chat_engine: 'ChatEngine'):
-        super().__init__(module_id, config, chat_engine)
+    def __init__(self, module_id: str, config: Dict, conversation_manager: 'ConversationManager'):
+        super().__init__(module_id, config, conversation_manager)
 
         self.server: Optional[websockets.WebSocketServer] = None
 

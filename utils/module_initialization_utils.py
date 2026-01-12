@@ -12,7 +12,7 @@ async def initialize_single_module_instance(
         factory_dict: Dict[str, Callable[..., Union[BaseModule, BaseProtocol]]],
         base_class: Union[Type[BaseModule], Type[BaseProtocol]],
         existing_modules: Dict[str, Union[BaseModule, BaseProtocol]],
-        chat_engine: Optional['ChatEngine'] = None
+        conversation_manager: Optional['ConversationManager'] = None
 ) -> Optional[Union[BaseModule, BaseProtocol]]:
     """
     通用函数，用于初始化单个模块实例。
@@ -24,7 +24,7 @@ async def initialize_single_module_instance(
         factory_dict (Dict[str, Callable]): 模块工厂函数的字典，用于创建模块实例。
         base_class (Union[Type[BaseModule], Type[BaseProtocol]]): 模块实例应继承的基类，用于类型检查。
         existing_modules (Dict[str, Union[BaseModule, BaseProtocol]]): 已加载模块的字典，用于检查重复。
-        chat_engine (Optional[ChatEngine]): ChatEngine 实例，用于协议适配器创建 ConversationHandler。
+        conversation_manager (Optional[ConversationManager]): ConversationManager 实例，用于协议适配器会话管理。
 
     Returns:
         Optional[Union[BaseModule, BaseProtocol]]: 初始化成功的模块实例，失败则返回 None。
@@ -47,13 +47,13 @@ async def initialize_single_module_instance(
         # 调用工厂函数创建模块实例
         adapter_type = module_config.get("adapter_type")
 
-        # 根据是否传入 chat_engine 决定调用方式
-        if chat_engine is not None:
+        # 根据是否传入 conversation_manager 决定调用方式
+        if conversation_manager is not None:
             module_instance: Union[BaseModule, BaseProtocol] = factory(
                 adapter_type=adapter_type,
                 module_id=module_id,
                 config=module_config,
-                chat_engine=chat_engine
+                conversation_manager=conversation_manager
             )
         else:
             module_instance: Union[BaseModule, BaseProtocol] = factory(
