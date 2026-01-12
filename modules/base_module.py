@@ -17,7 +17,7 @@ class BaseModule(ABC):
         self,
         module_id: str,
         config: Dict[str, Any],
-    ) -> None:
+    ):
         """初始化基础模块"""
         self.module_id = module_id
         self.config = config
@@ -37,10 +37,10 @@ class BaseModule(ABC):
         return self._is_ready
 
     @abstractmethod
-    async def setup(self) -> None:
+    async def setup(self):
         """初始化模块资源，子类必须实现此方法"""
         raise NotImplementedError("子类必须实现 setup 方法")
 
-    async def close(self) -> None:
+    async def close(self):
         """关闭模块，释放资源"""
         self._is_ready = False

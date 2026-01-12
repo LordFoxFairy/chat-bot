@@ -51,13 +51,13 @@ class FunASRSenseVoiceAdapter(BaseASR):
 
         self.model: Optional[AutoModel] = None
 
-        logger.info(f"FunASR [{self.module_id}] 配置加载完成:")
+        logger.info(f"ASR/FunASR [{self.module_id}] 配置加载完成:")
         logger.info(f"  - 模型目录: {self.model_dir}")
         logger.info(f"  - 设备: {self.device}")
 
     async def setup(self):
         """初始化 FunASR SenseVoice 模型"""
-        logger.info(f"FunASR [{self.module_id}] 正在初始化模型...")
+        logger.info(f"ASR/FunASR [{self.module_id}] 正在初始化模型...")
 
         try:
             # 验证模型路径
@@ -65,7 +65,7 @@ class FunASRSenseVoiceAdapter(BaseASR):
             if not os.path.exists(model_path):
                 raise ModuleInitializationError(f"模型目录不存在: {model_path}")
 
-            logger.info(f"FunASR [{self.module_id}] 从 {model_path} 加载模型...")
+            logger.info(f"ASR/FunASR [{self.module_id}] 从 {model_path} 加载模型...")
 
             # 构建模型参数
             chunk_size = [
@@ -84,7 +84,7 @@ class FunASRSenseVoiceAdapter(BaseASR):
             if self.output_dir:
                 params["output_dir"] = os.path.abspath(self.output_dir)
 
-            logger.debug(f"FunASR [{self.module_id}] 模型参数: {params}")
+            logger.debug(f"ASR/FunASR [{self.module_id}] 模型参数: {params}")
 
             # 加载模型
             self.model = AutoModel(**params)  # type: ignore
@@ -94,12 +94,12 @@ class FunASRSenseVoiceAdapter(BaseASR):
 
             self._is_initialized = True
             self._is_ready = True
-            logger.info(f"FunASR [{self.module_id}] 模型初始化成功")
+            logger.info(f"ASR/FunASR [{self.module_id}] 模型初始化成功")
 
         except Exception as e:
             self._is_initialized = False
             self._is_ready = False
-            logger.error(f"FunASR [{self.module_id}] 初始化失败: {e}", exc_info=True)
+            logger.error(f"ASR/FunASR [{self.module_id}] 初始化失败: {e}", exc_info=True)
             raise ModuleInitializationError(f"FunASR 初始化失败: {e}") from e
 
     async def recognize(self, audio: AudioData) -> str:
@@ -110,7 +110,7 @@ class FunASRSenseVoiceAdapter(BaseASR):
         # 预处理音频
         audio_array = self._preprocess(audio)
         if audio_array is None or audio_array.size == 0:
-            logger.debug(f"FunASR [{self.module_id}] 音频预处理后为空")
+            logger.debug(f"ASR/FunASR [{self.module_id}] 音频预处理后为空")
             return ""
 
         # 执行推理
@@ -121,12 +121,12 @@ class FunASRSenseVoiceAdapter(BaseASR):
             text = self._extract_text(result)
 
             if text:
-                logger.debug(f"FunASR [{self.module_id}] 识别结果: '{text}'")
+                logger.debug(f"ASR/FunASR [{self.module_id}] 识别结果: '{text}'")
 
             return text
 
         except Exception as e:
-            logger.error(f"FunASR [{self.module_id}] 推理失败: {e}", exc_info=True)
+            logger.error(f"ASR/FunASR [{self.module_id}] 推理失败: {e}", exc_info=True)
             raise ModuleProcessingError(f"推理失败: {e}") from e
 
     def _preprocess(self, audio: AudioData) -> Optional[np.ndarray]:
@@ -143,14 +143,14 @@ class FunASRSenseVoiceAdapter(BaseASR):
         """执行模型推理"""
         loop = asyncio.get_running_loop()
 
-        logger.debug(f"FunASR [{self.module_id}] 开始推理，音频形状: {audio_array.shape}")
+        logger.debug(f"ASR/FunASR [{self.module_id}] 开始推理，音频形状: {audio_array.shape}")
 
         result = await loop.run_in_executor(
             None,
             partial(self.model.generate, input=audio_array, fs=self.sample_rate)
         )
 
-        logger.debug(f"FunASR [{self.module_id}] 推理完成，结果: {result}")
+        logger.debug(f"ASR/FunASR [{self.module_id}] 推理完成，结果: {result}")
 
         return result
 

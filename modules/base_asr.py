@@ -22,7 +22,7 @@ class BaseASR(BaseModule):
         self,
         module_id: str,
         config: Dict[str, Any],
-    ) -> None:
+    ):
         super().__init__(module_id, config)
 
         # 读取 ASR 通用配置
@@ -30,7 +30,7 @@ class BaseASR(BaseModule):
         self.sample_rate = self.config.get("sample_rate", 16000)
         self.channels = self.config.get("channels", 1)
 
-        logger.debug(f"BaseASR [{self.module_id}] 配置加载:")
+        logger.debug(f"ASR [{self.module_id}] 配置加载:")
         logger.debug(f"  - language: {self.language}")
         logger.debug(f"  - sample_rate: {self.sample_rate}")
         logger.debug(f"  - channels: {self.channels}")
