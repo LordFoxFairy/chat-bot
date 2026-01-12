@@ -9,14 +9,6 @@ from core.exceptions import ModuleInitializationError, ModuleProcessingError
 from modules.base_vad import BaseVAD
 from utils.logging_setup import logger
 
-# 动态导入 torch
-try:
-    TORCH_AVAILABLE = True
-except ImportError:  # pragma: no cover
-    logger.warning("torch 库未安装，SileroVADAdapter 将无法使用。请运行 'pip install torch'")
-    torch = None  # type: ignore
-    TORCH_AVAILABLE = False
-
 
 class SileroVADAdapter(BaseVAD):
     """Silero VAD 语音活动检测适配器
@@ -37,9 +29,6 @@ class SileroVADAdapter(BaseVAD):
         config: Dict[str, Any],
     ):
         super().__init__(module_id, config)
-
-        if not TORCH_AVAILABLE:
-            raise ModuleInitializationError("torch 库未安装")
 
         # 读取 Silero VAD 特定配置
         self.model_repo_path = self.config.get("model_repo_path", self.DEFAULT_MODEL_REPO)
