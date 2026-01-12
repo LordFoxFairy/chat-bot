@@ -2,7 +2,6 @@ import asyncio
 import base64
 import json
 import re
-import uuid
 from typing import Optional, Dict, Tuple
 
 import websockets
@@ -18,7 +17,7 @@ from service.AudioConsumer import AudioConsumer
 from utils.logging_setup import logger
 
 
-class WebSocketProtocolAdapter(BaseProtocol):
+class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
     """WebSocket 协议适配器
 
     管理 WebSocket 连接、会话和消息路由。
@@ -35,12 +34,7 @@ class WebSocketProtocolAdapter(BaseProtocol):
         # WebSocket 服务器
         self.server: Optional[websockets.WebSocketServer] = None
 
-        # 会话映射
-        self.tag_to_session: Dict[str, str] = {}
-        self.session_to_websocket: Dict[str, WebSocketServerProtocol] = {}
-        self.websocket_to_session: Dict[WebSocketServerProtocol, str] = {}
-
-        # 会话资源
+        # 会话资源（不包括基类已提供的映射）
         self.audio_consumers: Dict[str, AudioConsumer] = {}
         self.session_interrupt_flags: Dict[str, bool] = {}
         self.session_turn_context: Dict[str, Dict[str, any]] = {}
@@ -79,7 +73,7 @@ class WebSocketProtocolAdapter(BaseProtocol):
         """关闭协议，释放资源"""
         logger.info(f"Protocol/WebSocket [{self.module_id}] 正在关闭...")
         await self.stop()
-        self._cleanup_all_sessions()
+        self._cleanup_all_session_resources()
         self._is_ready = False
         self._is_initialized = False
         logger.info(f"Protocol/WebSocket [{self.module_id}] 已关闭")
@@ -128,12 +122,9 @@ class WebSocketProtocolAdapter(BaseProtocol):
                 return None, None
 
             tag_id = stream_event.tag_id
-            session_id = str(uuid.uuid4())
 
-            # 建立映射关系
-            self.tag_to_session[tag_id] = session_id
-            self.session_to_websocket[session_id] = websocket
-            self.websocket_to_session[websocket] = session_id
+            # 使用基类方法创建会话
+            session_id = self.create_session(websocket, tag_id)
 
             # 初始化会话资源
             self._init_session_resources(session_id, tag_id)
@@ -193,7 +184,8 @@ class WebSocketProtocolAdapter(BaseProtocol):
 
     def _cleanup_session(self, websocket: WebSocketServerProtocol):
         """清理会话资源"""
-        session_id = self.websocket_to_session.pop(websocket, None)
+        # 使用基类方法移除会话映射
+        session_id = self.remove_session_by_connection(websocket)
         if not session_id:
             return
 
@@ -206,24 +198,23 @@ class WebSocketProtocolAdapter(BaseProtocol):
             self.audio_consumers[session_id].stop()
             del self.audio_consumers[session_id]
 
-        # 清理各种映射
+        # 清理会话资源
         self.session_interrupt_flags.pop(session_id, None)
-        self.session_to_websocket.pop(session_id, None)
         self.session_turn_context.pop(session_id, None)
 
-    def _cleanup_all_sessions(self):
+    def _cleanup_all_session_resources(self):
         """清理所有会话资源"""
-        logger.info(f"Protocol/WebSocket [{self.module_id}] 清理所有会话")
+        logger.info(f"Protocol/WebSocket [{self.module_id}] 清理所有会话资源")
 
         for consumer in self.audio_consumers.values():
             consumer.stop()
 
         self.audio_consumers.clear()
         self.session_interrupt_flags.clear()
-        self.session_to_websocket.clear()
-        self.websocket_to_session.clear()
         self.session_turn_context.clear()
-        self.tag_to_session.clear()
+
+        # 使用基类方法清理映射
+        self.clear_all_sessions()
 
     # ==================== 消息处理 ====================
 
@@ -350,7 +341,7 @@ class WebSocketProtocolAdapter(BaseProtocol):
     ):
         """触发 LLM 对话和 TTS 合成"""
         session_id = metadata["session_id"]
-        websocket = self.session_to_websocket.get(session_id)
+        websocket = self.get_connection(session_id)
 
         if not websocket:
             return
@@ -407,7 +398,7 @@ class WebSocketProtocolAdapter(BaseProtocol):
         is_final: bool = False
     ):
         """处理并发送 TTS 结果"""
-        websocket = self.session_to_websocket.get(session_id)
+        websocket = self.get_connection(session_id)
 
         if not websocket or self.session_interrupt_flags.get(session_id, False):
             return
