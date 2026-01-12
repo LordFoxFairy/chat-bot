@@ -7,7 +7,7 @@ from data_models import StreamEvent, EventType, TextData
 from modules import BaseLLM, BaseTTS, BaseVAD, BaseASR
 from core.session_context import SessionContext
 from core.session_manager import session_manager
-from service.AudioConsumer import AudioConsumer
+from application.audio import AudioStreamProcessor
 from utils.logging_setup import logger
 
 
@@ -46,17 +46,17 @@ class ConversationHandler:
         self.interrupt_flag = False
 
         # 业务组件
-        self.audio_consumer: Optional[AudioConsumer] = None
+        self.audio_processor: Optional[AudioStreamProcessor] = None
 
         logger.info(f"ConversationHandler 创建: session={session_id}")
 
     async def start(self):
-        """启动对话处理器 - 创建 SessionContext 和 AudioConsumer"""
+        """启动对话处理器 - 创建 SessionContext 和 AudioStreamProcessor"""
         # 创建 SessionContext
         session_ctx = SessionContext()
         session_ctx.session_id = self.session_id
         session_ctx.tag_id = self.tag_id
-        session_ctx.global_module_manager = self.chat_engine.module_manager
+        session_ctx.global_module_manager = self.chat_engine
         session_manager.create_session(session_ctx)
 
         # 获取模块
@@ -64,16 +64,16 @@ class ConversationHandler:
         vad_module: BaseVAD = context.global_module_manager.get_module("vad")
         asr_module: BaseASR = context.global_module_manager.get_module("asr")
 
-        # 创建 AudioConsumer
-        self.audio_consumer = AudioConsumer(
+        # 创建 AudioStreamProcessor（重构后的 AudioConsumer）
+        self.audio_processor = AudioStreamProcessor(
             session_context=session_ctx,
             vad_module=vad_module,
             asr_module=asr_module,
-            asr_result_callback=self._on_asr_result,
+            result_callback=self._on_asr_result,
             silence_timeout=self.DEFAULT_SILENCE_TIMEOUT,
             max_buffer_duration=self.DEFAULT_MAX_BUFFER_DURATION,
         )
-        self.audio_consumer.start()
+        self.audio_processor.start()
 
         logger.info(f"ConversationHandler 启动完成: session={self.session_id}")
 
@@ -81,10 +81,10 @@ class ConversationHandler:
         """停止对话处理器 - 清理资源"""
         logger.info(f"ConversationHandler 正在停止: session={self.session_id}")
 
-        # 停止 AudioConsumer
-        if self.audio_consumer:
-            self.audio_consumer.stop()
-            self.audio_consumer = None
+        # 停止 AudioStreamProcessor
+        if self.audio_processor:
+            self.audio_processor.stop()
+            self.audio_processor = None
 
         # 清理状态
         self.turn_context.clear()
@@ -101,14 +101,14 @@ class ConversationHandler:
             self.turn_context['was_interrupted'] = True
             logger.debug(f"ConversationHandler 检测到打断: session={self.session_id}")
 
-        # 传递给 AudioConsumer (现在是异步的)
-        if self.audio_consumer:
-            await self.audio_consumer.process_chunk(audio_data)
+        # 传递给 AudioStreamProcessor (全异步)
+        if self.audio_processor:
+            await self.audio_processor.process_chunk(audio_data)
 
     def handle_speech_end(self):
         """处理语音结束信号"""
-        if self.audio_consumer:
-            self.audio_consumer.signal_client_speech_end()
+        if self.audio_processor:
+            self.audio_processor.signal_client_speech_end()
 
     async def handle_text_input(self, text: str):
         """处理文本输入（不打断）"""
