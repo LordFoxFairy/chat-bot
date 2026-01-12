@@ -2,7 +2,7 @@ from typing import Dict, Optional, Callable, Awaitable
 
 from data_models import StreamEvent
 from utils.logging_setup import logger
-from .conversation_handler import ConversationHandler
+from .conversation import ConversationHandler
 
 
 class ConversationManager:
