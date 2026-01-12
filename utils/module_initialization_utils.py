@@ -43,7 +43,9 @@ async def initialize_single_module_instance(
     try:
         logger.info("初始化模块 '%s'...", module_id)
         # 调用工厂函数创建模块实例
+        adapter_type = module_config.get("adapter_type")
         module_instance: Union[BaseModule, BaseProtocol] = factory(
+            adapter_type=adapter_type,
             module_id=module_id,
             config=module_config
         )
@@ -55,8 +57,8 @@ async def initialize_single_module_instance(
             )
 
         # 初始化模块并添加到已加载模块字典
-        await module_instance.initialize()
-        existing_modules[module_id] = module_instance  # 在这里直接修改传入的字典
+        await module_instance.setup()
+        existing_modules[module_id] = module_instance
         logger.info("模块 '%s' 初始化成功。", module_id)
         return module_instance
 
