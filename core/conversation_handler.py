@@ -93,7 +93,7 @@ class ConversationHandler:
 
     # ==================== 消息处理 ====================
 
-    def handle_audio(self, audio_data: bytes):
+    async def handle_audio(self, audio_data: bytes):
         """处理音频数据"""
         # 音频到来 = 可能的打断
         if not self.interrupt_flag:
@@ -101,9 +101,9 @@ class ConversationHandler:
             self.turn_context['was_interrupted'] = True
             logger.debug(f"ConversationHandler 检测到打断: session={self.session_id}")
 
-        # 传递给 AudioConsumer
+        # 传递给 AudioConsumer (现在是异步的)
         if self.audio_consumer:
-            self.audio_consumer.process_chunk(audio_data)
+            await self.audio_consumer.process_chunk(audio_data)
 
     def handle_speech_end(self):
         """处理语音结束信号"""
@@ -185,7 +185,10 @@ class ConversationHandler:
         """处理 LLM 输出并合成语音"""
         buffer = ""
 
-        async for content in llm_module.stream_chat_response(llm_input):
+        # 修复: BaseLLM 的方法是 chat_stream(text, session_id)
+        async for text_chunk in llm_module.chat_stream(llm_input, self.session_id):
+            # chat_stream 返回 AsyncGenerator[TextData, None]
+            content = text_chunk.text if hasattr(text_chunk, 'text') else text_chunk
             # 检查打断
             if self.interrupt_flag:
                 logger.info(f"ConversationHandler 对话被打断: session={self.session_id}")
@@ -214,7 +217,9 @@ class ConversationHandler:
         llm_module: BaseLLM
     ):
         """只处理 LLM 输出（无 TTS）"""
-        async for content in llm_module.stream_chat_response(llm_input):
+        # 修复: BaseLLM 的方法是 chat_stream(text, session_id)
+        async for text_chunk in llm_module.chat_stream(llm_input, self.session_id):
+            content = text_chunk.text if hasattr(text_chunk, 'text') else text_chunk
             if self.interrupt_flag:
                 break
 
@@ -253,13 +258,16 @@ class ConversationHandler:
         )
         await self.send_callback(text_event)
 
-        # 生成并发送音频
-        audio_data = await tts_module.text_to_speech_block(TextData(text=sentence))
+        # 修复: BaseTTS.synthesize_stream 返回 AsyncGenerator[AudioData, None]
+        # 需要遍历音频流并发送每个音频块
+        async for audio_chunk in tts_module.synthesize_stream(TextData(text=sentence)):
+            if self.interrupt_flag:
+                break
 
-        if audio_data and audio_data.data and not self.interrupt_flag:
-            audio_event = StreamEvent(
-                event_type=EventType.SERVER_AUDIO_RESPONSE,
-                event_data=audio_data,
-                session_id=self.session_id
-            )
-            await self.send_callback(audio_event)
+            if audio_chunk and audio_chunk.data:
+                audio_event = StreamEvent(
+                    event_type=EventType.SERVER_AUDIO_RESPONSE,
+                    event_data=audio_chunk,
+                    session_id=self.session_id
+                )
+                await self.send_callback(audio_event)

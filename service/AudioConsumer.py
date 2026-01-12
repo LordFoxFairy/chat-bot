@@ -62,11 +62,13 @@ class AudioConsumer:
             self.monitor_task = None
             logger.info(f"[AudioConsumer] Async monitor stopped for session {self.session_context.session_id}.")
 
-    def process_chunk(self, chunk: bytes):
+    async def process_chunk(self, chunk: bytes):
         """处理传入的音频区块，使用VAD过滤无效音频。"""
-        with self._lock:
-            if self.vad_module.is_speech_present(chunk):
-                # 只有包含语音的音频块才会被处理
+        # 注意: 这里调用 detect() 是异步的，需要 await
+        # TODO: 应该使用 asyncio.Lock 替代 threading.Lock
+        if await self.vad_module.detect(chunk):
+            # 只有包含语音的音频块才会被处理
+            with self._lock:
                 self.audio_buffer.append(chunk)
                 self.last_speech_time = time.time()
 
@@ -142,7 +144,8 @@ class AudioConsumer:
             f"--- [Session: {self.session_context.session_id}] Performing ASR on segment (is_final: {is_final}) ---")
 
         # 新增：在处理整个音频段前，再进行一次VAD检查
-        if not self.vad_module.is_speech_present(audio_data_bytes):
+        # TODO: 这个双重 VAD 检查可能是冗余的，建议重构时移除
+        if not await self.vad_module.detect(audio_data_bytes):
             logger.warning(
                 f"Final audio segment for session {self.session_context.session_id} discarded by VAD. No speech detected.")
             # 如果这是最后一个片段（即使是静音），也需要发送一个空的回调，以确保上游逻辑（如上下文重置）能够被触发
@@ -159,7 +162,10 @@ class AudioConsumer:
 
         try:
             audio_data = AudioData(data=audio_data_bytes, format=AudioFormat.PCM)
-            text_data_segment = await self.asr_module.recognize_audio_block(audio_data, self.session_context.tag_id)
+            # 修复: BaseASR 的方法是 recognize(audio: AudioData) -> str
+            recognized_text = await self.asr_module.recognize(audio_data)
+            # 构建 TextData (原来的 recognize_audio_block 应该是做了这个封装)
+            text_data_segment = TextData(text=recognized_text or "", is_final=is_final) if recognized_text else None
 
             if text_data_segment and text_data_segment.text:
                 # 新增：使用正则表达式清洗ASR返回的文本，移除特殊标记
