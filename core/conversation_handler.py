@@ -1,0 +1,265 @@
+import asyncio
+import re
+from typing import Optional, Dict, Callable, Awaitable
+
+import constant
+from data_models import StreamEvent, EventType, TextData
+from modules import BaseLLM, BaseTTS, BaseVAD, BaseASR
+from core.session_context import SessionContext
+from core.session_manager import session_manager
+from service.AudioConsumer import AudioConsumer
+from utils.logging_setup import logger
+
+
+class ConversationHandler:
+    """会话对话处理器
+
+    职责:
+    - 管理单个会话的对话流程
+    - 处理音频 → ASR → LLM → TTS 完整链路
+    - 管理打断逻辑和对话上下文
+    - 与传输协议解耦（通过回调发送消息）
+    """
+
+    # 默认配置
+    DEFAULT_SILENCE_TIMEOUT = 1.0
+    DEFAULT_MAX_BUFFER_DURATION = 5.0
+    SENTENCE_DELIMITER_PATTERN = re.compile(r'([，。！？；、,.!?;])')
+
+    def __init__(
+        self,
+        session_id: str,
+        tag_id: str,
+        chat_engine: 'ChatEngine',
+        send_callback: Callable[[StreamEvent], Awaitable[None]]
+    ):
+        self.session_id = session_id
+        self.tag_id = tag_id
+        self.chat_engine = chat_engine
+        self.send_callback = send_callback
+
+        # 对话状态
+        self.turn_context = {
+            'last_user_text': '',
+            'was_interrupted': False
+        }
+        self.interrupt_flag = False
+
+        # 业务组件
+        self.audio_consumer: Optional[AudioConsumer] = None
+
+        logger.info(f"ConversationHandler 创建: session={session_id}")
+
+    async def start(self):
+        """启动对话处理器 - 创建 SessionContext 和 AudioConsumer"""
+        # 创建 SessionContext
+        session_ctx = SessionContext()
+        session_ctx.session_id = self.session_id
+        session_ctx.tag_id = self.tag_id
+        session_ctx.global_module_manager = self.chat_engine.module_manager
+        session_manager.create_session(session_ctx)
+
+        # 获取模块
+        context = session_manager.get_session(constant.CHAT_ENGINE_NAME)
+        vad_module: BaseVAD = context.global_module_manager.get_module("vad")
+        asr_module: BaseASR = context.global_module_manager.get_module("asr")
+
+        # 创建 AudioConsumer
+        self.audio_consumer = AudioConsumer(
+            session_context=session_ctx,
+            vad_module=vad_module,
+            asr_module=asr_module,
+            asr_result_callback=self._on_asr_result,
+            silence_timeout=self.DEFAULT_SILENCE_TIMEOUT,
+            max_buffer_duration=self.DEFAULT_MAX_BUFFER_DURATION,
+        )
+        self.audio_consumer.start()
+
+        logger.info(f"ConversationHandler 启动完成: session={self.session_id}")
+
+    async def stop(self):
+        """停止对话处理器 - 清理资源"""
+        logger.info(f"ConversationHandler 正在停止: session={self.session_id}")
+
+        # 停止 AudioConsumer
+        if self.audio_consumer:
+            self.audio_consumer.stop()
+            self.audio_consumer = None
+
+        # 清理状态
+        self.turn_context.clear()
+
+        logger.info(f"ConversationHandler 已停止: session={self.session_id}")
+
+    # ==================== 消息处理 ====================
+
+    def handle_audio(self, audio_data: bytes):
+        """处理音频数据"""
+        # 音频到来 = 可能的打断
+        if not self.interrupt_flag:
+            self.interrupt_flag = True
+            self.turn_context['was_interrupted'] = True
+            logger.debug(f"ConversationHandler 检测到打断: session={self.session_id}")
+
+        # 传递给 AudioConsumer
+        if self.audio_consumer:
+            self.audio_consumer.process_chunk(audio_data)
+
+    def handle_speech_end(self):
+        """处理语音结束信号"""
+        if self.audio_consumer:
+            self.audio_consumer.signal_client_speech_end()
+
+    async def handle_text_input(self, text: str):
+        """处理文本输入（不打断）"""
+        self.turn_context['last_user_text'] = text
+        self.turn_context['was_interrupted'] = False
+
+        await self._trigger_conversation(text)
+
+    async def _on_asr_result(
+        self,
+        asr_event: StreamEvent,
+        metadata: Optional[Dict]
+    ):
+        """ASR 回调 - 处理识别结果"""
+        text_data: TextData = asr_event.event_data
+
+        if not text_data.is_final:
+            return
+
+        # 空结果，重置打断标志
+        if not text_data.text:
+            logger.debug(f"ConversationHandler ASR 结果为空: session={self.session_id}")
+            self.turn_context['was_interrupted'] = False
+            return
+
+        # 处理打断场景
+        if self.turn_context['was_interrupted']:
+            # 拼接上一轮和本轮文本
+            combined_text = f"{self.turn_context.get('last_user_text', '')} {text_data.text}".strip()
+            logger.info(
+                f"ConversationHandler 拼接打断文本 (session: {self.session_id}): "
+                f"'{combined_text}'"
+            )
+            user_text = combined_text
+        else:
+            user_text = text_data.text
+
+        # 更新上下文
+        self.turn_context['last_user_text'] = user_text
+        self.turn_context['was_interrupted'] = False
+
+        # 重置打断标志
+        self.interrupt_flag = False
+
+        # 触发对话
+        await self._trigger_conversation(user_text)
+
+    # ==================== 对话流程 ====================
+
+    async def _trigger_conversation(self, user_text: str):
+        """触发对话流程: LLM → TTS"""
+        # 获取模块
+        context = session_manager.get_session(constant.CHAT_ENGINE_NAME)
+        llm_module: BaseLLM = context.global_module_manager.get_module("llm")
+        tts_module: BaseTTS = context.global_module_manager.get_module("tts")
+
+        if not llm_module:
+            logger.error(f"ConversationHandler LLM 模块未找到: session={self.session_id}")
+            return
+
+        llm_input = TextData(text=user_text, is_final=True)
+
+        if tts_module:
+            await self._process_with_tts(llm_input, llm_module, tts_module)
+        else:
+            await self._process_text_only(llm_input, llm_module)
+
+    async def _process_with_tts(
+        self,
+        llm_input: TextData,
+        llm_module: BaseLLM,
+        tts_module: BaseTTS
+    ):
+        """处理 LLM 输出并合成语音"""
+        buffer = ""
+
+        async for content in llm_module.stream_chat_response(llm_input):
+            # 检查打断
+            if self.interrupt_flag:
+                logger.info(f"ConversationHandler 对话被打断: session={self.session_id}")
+                break
+
+            if content:
+                buffer += content
+                match = self.SENTENCE_DELIMITER_PATTERN.search(buffer)
+
+                if match:
+                    sentence = buffer[:match.end()]
+                    buffer = buffer[match.end():]
+                    asyncio.create_task(
+                        self._send_sentence(sentence, tts_module, is_final=False)
+                    )
+
+        # 发送剩余文本
+        if buffer and not self.interrupt_flag:
+            asyncio.create_task(
+                self._send_sentence(buffer, tts_module, is_final=True)
+            )
+
+    async def _process_text_only(
+        self,
+        llm_input: TextData,
+        llm_module: BaseLLM
+    ):
+        """只处理 LLM 输出（无 TTS）"""
+        async for content in llm_module.stream_chat_response(llm_input):
+            if self.interrupt_flag:
+                break
+
+            if content:
+                text_event = StreamEvent(
+                    event_type=EventType.SERVER_TEXT_RESPONSE,
+                    event_data=TextData(text=content, is_final=False),
+                    session_id=self.session_id
+                )
+                await self.send_callback(text_event)
+
+        # 发送最终标记
+        if not self.interrupt_flag:
+            final_event = StreamEvent(
+                event_type=EventType.SERVER_TEXT_RESPONSE,
+                event_data=TextData(text="", is_final=True),
+                session_id=self.session_id
+            )
+            await self.send_callback(final_event)
+
+    async def _send_sentence(
+        self,
+        sentence: str,
+        tts_module: BaseTTS,
+        is_final: bool = False
+    ):
+        """发送句子（文本 + 音频）"""
+        if self.interrupt_flag:
+            return
+
+        # 发送文本
+        text_event = StreamEvent(
+            event_type=EventType.SERVER_TEXT_RESPONSE,
+            event_data=TextData(text=sentence, is_final=is_final),
+            session_id=self.session_id
+        )
+        await self.send_callback(text_event)
+
+        # 生成并发送音频
+        audio_data = await tts_module.text_to_speech_block(TextData(text=sentence))
+
+        if audio_data and audio_data.data and not self.interrupt_flag:
+            audio_event = StreamEvent(
+                event_type=EventType.SERVER_AUDIO_RESPONSE,
+                event_data=audio_data,
+                session_id=self.session_id
+            )
+            await self.send_callback(audio_event)

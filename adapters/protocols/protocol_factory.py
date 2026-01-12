@@ -20,8 +20,19 @@ def create_protocol_adapter(
     adapter_type: str,
     module_id: str,
     config: Dict[str, Any],
+    chat_engine: 'ChatEngine'
 ) -> BaseProtocol:
-    """创建 Protocol 适配器实例"""
+    """创建 Protocol 适配器实例
+
+    Args:
+        adapter_type: 协议类型 (websocket, http, grpc 等)
+        module_id: 模块唯一标识符
+        config: 协议配置
+        chat_engine: ChatEngine 实例，用于访问模块和创建 ConversationHandler
+
+    Returns:
+        BaseProtocol: 协议适配器实例
+    """
     adapter_class = PROTOCOL_ADAPTERS.get(adapter_type)
 
     if adapter_class is None:
@@ -40,6 +51,7 @@ def create_protocol_adapter(
         instance = adapter_class(
             module_id=module_id,
             config=config,
+            chat_engine=chat_engine
         )
 
         return instance
