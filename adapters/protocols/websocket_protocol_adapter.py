@@ -1,6 +1,4 @@
 import asyncio
-import base64
-import json
 import re
 from typing import Optional, Dict, Tuple
 
@@ -10,7 +8,7 @@ from websockets.server import WebSocketServerProtocol
 import constant
 from core.session_context import SessionContext
 from core.session_manager import session_manager
-from data_models import StreamEvent, EventType, TextData, AudioData
+from data_models import StreamEvent, EventType, TextData
 from modules import BaseLLM, BaseTTS, BaseVAD, BaseASR
 from modules.base_protocol import BaseProtocol
 from service.AudioConsumer import AudioConsumer
@@ -398,9 +396,7 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
         is_final: bool = False
     ):
         """处理并发送 TTS 结果"""
-        websocket = self.get_connection(session_id)
-
-        if not websocket or self.session_interrupt_flags.get(session_id, False):
+        if self.session_interrupt_flags.get(session_id, False):
             return
 
         # 发送文本响应
@@ -409,7 +405,7 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
             event_data=TextData(text=sentence, is_final=is_final),
             session_id=session_id
         )
-        await self._send_to_client(websocket, text_event.model_dump_json())
+        await self.send_event(session_id, text_event)
 
         # 生成并发送音频
         audio_data = await tts_module.text_to_speech_block(
@@ -423,31 +419,23 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
                     event_data=audio_data,
                     session_id=session_id
                 )
-                await self._send_to_client(
-                    websocket,
-                    self._serialize_audio_event(audio_event)
-                )
+                await self.send_event(session_id, audio_event)
 
-    # ==================== 工具方法 ====================
+    # ==================== 协议特定方法 ====================
 
-    @staticmethod
-    def _serialize_audio_event(event: StreamEvent) -> str:
-        """序列化音频事件 (Base64 编码)"""
-        event_dict = event.model_dump()
-        raw_data_bytes = event_dict['event_data']['data']
-        base64_encoded_data = base64.b64encode(raw_data_bytes).decode('utf-8')
-        event_dict['event_data']['data'] = base64_encoded_data
-        return json.dumps(event_dict)
-
-    @staticmethod
-    async def _send_to_client(
-        websocket: WebSocketServerProtocol,
+    async def send_message(
+        self,
+        connection: WebSocketServerProtocol,
         message: str
     ):
-        """发送消息到客户端"""
+        """发送消息到 WebSocket 连接"""
         try:
-            await websocket.send(message)
+            await connection.send(message)
         except websockets.exceptions.ConnectionClosed:
-            pass
+            logger.debug(
+                f"Protocol/WebSocket [{self.module_id}] 连接已关闭"
+            )
         except Exception as e:
-            logger.error(f"Protocol/WebSocket 发送消息失败: {e}")
+            logger.error(
+                f"Protocol/WebSocket [{self.module_id}] 发送消息失败: {e}"
+            )

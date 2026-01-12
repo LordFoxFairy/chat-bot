@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional, TypeVar, Generic
 import uuid
 
 from modules.base_module import BaseModule
+from data_models import StreamEvent
 from utils.logging_setup import logger
 
 
@@ -132,3 +133,33 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
         self.tag_to_session.clear()
         self.session_to_connection.clear()
         self.connection_to_session.clear()
+
+    # ==================== 消息发送 ====================
+
+    @abstractmethod
+    async def send_message(self, connection: ConnectionT, message: str):
+        """发送消息到连接（子类实现具体传输逻辑）"""
+        raise NotImplementedError("Protocol 子类必须实现 send_message 方法")
+
+    async def send_event(
+        self,
+        session_id: str,
+        event: StreamEvent
+    ) -> bool:
+        """发送事件到会话（通用方法）"""
+        connection = self.get_connection(session_id)
+        if not connection:
+            logger.warning(
+                f"Protocol [{self.module_id}] 会话 {session_id} 的连接不存在"
+            )
+            return False
+
+        try:
+            await self.send_message(connection, event.to_json())
+            return True
+        except Exception as e:
+            logger.error(
+                f"Protocol [{self.module_id}] 发送事件失败 "
+                f"(session: {session_id}): {e}"
+            )
+            return False

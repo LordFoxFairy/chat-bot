@@ -1,3 +1,5 @@
+import base64
+import json
 import time
 from enum import Enum
 from typing import Union, Optional, Any, Dict
@@ -57,23 +59,29 @@ class StreamEvent(BaseModel):
     @model_validator(mode='before')
     @classmethod
     def dispatch_event_data_parsing(cls, data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        根據 event_type 的值，手動將 event_data 解析成對應的 Pydantic 模型。
-        """
+        """根据 event_type 解析 event_data 为对应的模型"""
         event_type = data.get('event_type')
         event_data_payload = data.get('event_data')
 
         if not event_type or not isinstance(event_data_payload, dict):
-            # 如果缺少必要信息，則不處理，讓後續的標準驗證去報錯
             return data
 
-        # --- 這就是您的分發邏輯 ---
         if event_type == EventType.CLIENT_TEXT_INPUT:
-            # 將原始字典解析為 TextData 物件
             data['event_data'] = TextData.model_validate(event_data_payload)
-        else:
-            # 如果有未知的 event_type，可以選擇拋出錯誤或保持原樣
-            # raise ValueError(f"未知的事件類型: {event_type}")
-            pass
 
         return data
+
+    def to_json(self) -> str:
+        """序列化为 JSON 字符串
+
+        如果 event_data 是 AudioData，会将 bytes 转为 Base64 编码
+        """
+        event_dict = self.model_dump()
+
+        # 如果是音频数据，需要 Base64 编码
+        if isinstance(self.event_data, AudioData) and self.event_data.data:
+            event_dict['event_data']['data'] = base64.b64encode(
+                self.event_data.data
+            ).decode('utf-8')
+
+        return json.dumps(event_dict)
