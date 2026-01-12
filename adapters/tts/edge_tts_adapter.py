@@ -1,132 +1,125 @@
-import asyncio
-import uuid
 from typing import AsyncGenerator, Optional, Dict, Any
 
-import edge_tts
-
-from data_models.audio_data import AudioData, AudioFormat
-from data_models.text_data import TextData
+from core.exceptions import ModuleInitializationError, ModuleProcessingError
+from data_models import AudioData, TextData, AudioFormat
 from modules.base_tts import BaseTTS
 from utils.logging_setup import logger
 
+# 动态导入 edge-tts
+try:
+    import edge_tts
+    EDGE_TTS_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    logger.warning("edge-tts 库未安装，EdgeTTSAdapter 将无法使用。请运行 'pip install edge-tts'")
+    edge_tts = None  # type: ignore
+    EDGE_TTS_AVAILABLE = False
+
 
 class EdgeTTSAdapter(BaseTTS):
+    """Edge TTS 语音合成适配器
+
+    使用 Microsoft Edge TTS 服务进行语音合成。
     """
-    使用 Microsoft Edge TTS 服務的適配器。
-    實現 BaseTTS 接口，提供原生音頻流。
-    """
 
-    def __init__(self, module_id: Optional[str] = "edge_tts",
-                 module_name: Optional[str] = "edge_tts_adapter",
-                 config: Optional[Dict[str, Any]] = None,
-                 event_loop: Optional[asyncio.AbstractEventLoop] = None,
-                 ):
+    # 默认配置常量
+    DEFAULT_VOICE = "zh-CN-XiaoxiaoNeural"
+    DEFAULT_RATE = "+0%"
+    DEFAULT_VOLUME = "+0%"
+    DEFAULT_PITCH = "+0Hz"
 
-        super().__init__(module_id, module_name, config, event_loop)
+    def __init__(
+        self,
+        module_id: str,
+        config: Dict[str, Any],
+    ):
+        super().__init__(module_id, config)
 
-        self.tts_voice: str = self.adapter_specific_config.get("voice", "zh-CN-XiaoxiaoNeural")
-        self.tts_rate: str = self.adapter_specific_config.get("rate", "+0%")
-        self.tts_volume: str = self.adapter_specific_config.get("volume", "+0%")
-        self.tts_pitch: str = self.adapter_specific_config.get("pitch", "+0Hz")
+        if not EDGE_TTS_AVAILABLE:
+            raise ModuleInitializationError("edge-tts 库未安装")
 
-        # EdgeTTS 原生輸出特性
-        output_audio_format: str = self.adapter_specific_config.get("output_audio_format", "mp3").lower()
-        try:
-            self.output_audio_format_enum: AudioFormat = AudioFormat[output_audio_format.upper()]
-        except KeyError:
-            logger.error(f"EdgeTTSAdapter 配置的 native_format '{output_audio_format}' 無效。將默認為 MP3。")
-            self.output_audio_format_enum = AudioFormat.MP3
+        # 读取 EdgeTTS 特定配置
+        self.rate = self.config.get("rate", self.DEFAULT_RATE)
+        self.volume = self.config.get("volume", self.DEFAULT_VOLUME)
+        self.pitch = self.config.get("pitch", self.DEFAULT_PITCH)
+        self.output_format = AudioFormat.MP3  # EdgeTTS 输出 MP3
 
-        # 這些是 EdgeTTS MP3 流常見的參數
-        self.sample_rate: int = self.adapter_specific_config.get("sample_rate", 24000)
-        self.channels: int = self.adapter_specific_config.get("channels", 1)
-        # 對於 MP3 等壓縮格式，sample_width 指的是解碼後 PCM 的 sample_width。
-        # pydub (如果用於後續處理) 通常將 MP3 解碼為 16-bit PCM，所以 sample_width 為 2。
-        # 如果適配器直接輸出 PCM，則此值應為 PCM 的實際 sample_width。
-        # 由於 EdgeTTS 直接輸出 MP3，這個值更多的是一個“預期解碼後”的值。
-        self.sample_width: int = self.adapter_specific_config.get("sample_width", 2)
+        logger.info(f"TTS/EdgeTTS [{self.module_id}] 配置加载完成:")
+        logger.info(f"  - voice: {self.voice}")
+        logger.info(f"  - rate: {self.rate}")
+        logger.info(f"  - volume: {self.volume}")
+        logger.info(f"  - pitch: {self.pitch}")
 
-        logger.info(f"EdgeTTSAdapter [{self.module_id}] 初始化。")
-        logger.info(
-            f"  TTS 引擎參數: voice='{self.tts_voice}', rate='{self.tts_rate}', volume='{self.tts_volume}', pitch='{self.tts_pitch}'")
-        logger.info(f"  原生輸出特性: format={self.output_audio_format_enum.value}, sample_rate={self.sample_rate}Hz, "
-                    f"channels={self.channels}, (預期解碼後) sample_width={self.sample_width}bytes")
-
-    async def initialize(self):
-        """异步初始化檢查，例如測試與TTS服務的連接。"""
-        if edge_tts is None:
-            logger.error(f"EdgeTTSAdapter [{self.module_id}] 初始化失敗: edge-tts 庫不可用。")
-            return
+    async def setup(self):
+        """初始化 Edge TTS"""
+        logger.info(f"TTS/EdgeTTS [{self.module_id}] 正在初始化...")
 
         try:
-            communicate = edge_tts.Communicate("测试", self.tts_voice)
+            # 测试连接
+            communicate = edge_tts.Communicate("测试", self.voice)
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio" and chunk["data"]:
-                    logger.info(f"EdgeTTSAdapter [{self.module_id}] 連接測試成功，聲音: {self.tts_voice}")
-                    return
-            logger.warning(f"EdgeTTSAdapter [{self.module_id}] 連接測試未收到音頻數據，聲音: {self.tts_voice}")
+                    logger.info(f"TTS/EdgeTTS [{self.module_id}] 连接测试成功")
+                    break
+
+            self._is_initialized = True
+            self._is_ready = True
+            logger.info(f"TTS/EdgeTTS [{self.module_id}] 初始化成功")
+
         except Exception as e:
-            logger.error(f"EdgeTTSAdapter [{self.module_id}] 初始化連接測試失敗 (聲音: {self.tts_voice}): {e}",
-                         exc_info=True)
+            self._is_initialized = False
+            self._is_ready = False
+            logger.error(f"TTS/EdgeTTS [{self.module_id}] 初始化失败: {e}", exc_info=True)
+            raise ModuleInitializationError(f"EdgeTTS 初始化失败: {e}") from e
 
-    async def text_to_speech_stream(self, text_input: TextData, **kwargs: Any) -> AsyncGenerator[AudioData, None]:
-        """
-        將文本轉換為 EdgeTTS 的原生音頻流。
-        kwargs 可以覆蓋初始化時的 tts_voice, tts_rate 等參數。
-        """
-        chunk_id = text_input.chunk_id if text_input.chunk_id else f"edge_tts_{uuid.uuid4().hex[:8]}"
-
-        text_to_speak = text_input.text
-        if not text_to_speak or not text_to_speak.strip():
-            logger.warning(f"EdgeTTSAdapter [{self.module_id}] (流ID: {chunk_id}): 輸入文本為空。")
-            yield AudioData(data=b'',
-                            format=self.output_audio_format_enum,
-                            is_final=True, metadata={"status": "empty_input"})
+    async def synthesize_stream(self, text: TextData) -> AsyncGenerator[AudioData, None]:
+        """流式合成语音"""
+        if not text.text or not text.text.strip():
+            logger.debug(f"TTS/EdgeTTS [{self.module_id}] 文本为空")
+            yield AudioData(
+                data=b"",
+                format=self.output_format,
+                is_final=True,
+                metadata={"status": "empty_input"}
+            )
             return
 
-        voice = kwargs.get("voice", self.tts_voice)
-        rate = kwargs.get("rate", self.tts_rate)
-        volume = kwargs.get("volume", self.tts_volume)
-        pitch = kwargs.get("pitch", self.tts_pitch)
-
-        logger.info(f"EdgeTTSAdapter [{self.module_id}] (流ID: {chunk_id}) 開始合成: '{text_to_speak[:30]}...' "
-                    f"(Voice: {voice}, Rate: {rate})")
-
         try:
-            communicate = edge_tts.Communicate(text_to_speak, voice, rate=rate, volume=volume, pitch=pitch)
+            logger.debug(f"TTS/EdgeTTS [{self.module_id}] 开始合成")
+
+            communicate = edge_tts.Communicate(
+                text.text,
+                self.voice,
+                rate=self.rate,
+                volume=self.volume,
+                pitch=self.pitch
+            )
+
             chunk_index = 0
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
                     audio_bytes = chunk["data"]
                     if audio_bytes:
                         logger.debug(
-                            f"EdgeTTSAdapter [{self.module_id}] (流ID: {chunk_id}, 塊: {chunk_index}) 生成原生音頻 {len(audio_bytes)} 字節。")
+                            f"TTS/EdgeTTS [{self.module_id}] 生成音频块 {chunk_index}: {len(audio_bytes)} 字节"
+                        )
                         yield AudioData(
                             data=audio_bytes,
-                            format=self.output_audio_format_enum,
+                            format=self.output_format,
                             is_final=False,
-                            metadata={"chunk_index": chunk_index,
-                                      "engine_output_audio_format": self.output_audio_format_enum.value}
+                            metadata={"chunk_index": chunk_index}
                         )
                         chunk_index += 1
-                elif chunk["type"] == "WordBoundary":
-                    pass
 
-            logger.info(f"EdgeTTSAdapter [{self.module_id}] (流ID: {chunk_id}) 合成流結束。")
+            logger.debug(f"TTS/EdgeTTS [{self.module_id}] 合成结束，共 {chunk_index} 个音频块")
+
+            # 发送最终标记
             yield AudioData(
-                data=b'',
-                format=self.output_audio_format_enum,
-                is_final=True, metadata={"status": "stream_end", "total_chunks": chunk_index}
+                data=b"",
+                format=self.output_format,
+                is_final=True,
+                metadata={"status": "complete", "total_chunks": chunk_index}
             )
 
-        except edge_tts.exceptions.NoAudioReceived:  # type: ignore
-            logger.error(f"EdgeTTSAdapter [{self.module_id}] (流ID: {chunk_id}) 未返回任何音頻數據 (NoAudioReceived)。")
-            yield AudioData(data=b'',
-                            format=self.output_audio_format_enum,
-                            is_final=True, metadata={"error": "no_audio_received_from_edge_tts"})
         except Exception as e:
-            logger.error(f"EdgeTTSAdapter [{self.module_id}] (流ID: {chunk_id}) 語音合成時发生未預期错误: {e}",
-                         exc_info=True)
-            yield AudioData(data=b'', 
-                            format=self.output_audio_format_enum,
-                            is_final=True, metadata={"error": f"tts_synthesis_unexpected_error: {str(e)}"})
+            logger.error(f"TTS/EdgeTTS [{self.module_id}] 合成失败: {e}", exc_info=True)
+            raise ModuleProcessingError(f"合成失败: {e}") from e
