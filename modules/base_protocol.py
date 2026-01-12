@@ -55,6 +55,11 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
         """停止协议服务"""
         raise NotImplementedError("Protocol 子类必须实现 stop 方法")
 
+    def set_chat_engine(self, chat_engine: 'ChatEngine'):
+        """设置 ChatEngine 引用"""
+        self.chat_engine = chat_engine
+        logger.debug(f"Protocol [{self.module_id}] 设置 ChatEngine")
+
     # ==================== 通用会话管理 ====================
 
     def create_session(
