@@ -3,7 +3,7 @@ from typing import Dict, Any, Optional, TypeVar, Generic
 import uuid
 
 from modules.base_module import BaseModule
-from data_models import StreamEvent
+from data_models import StreamEvent, EventType, TextData
 from utils.logging_setup import logger
 
 
@@ -17,20 +17,26 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
     职责:
     - 定义协议核心接口
     - 提供通用的会话管理
-    - 提供通用的连接映射
+    - 提供通用的协议消息处理（注册、路由、断开）
+    - 子类只需实现具体传输层
 
     子类需要实现:
     - setup: 初始化协议服务
     - start: 启动协议服务
     - stop: 停止协议服务
+    - send_message: 发送消息到连接
     """
 
     def __init__(
         self,
         module_id: str,
         config: Dict[str, Any],
+        chat_engine: 'ChatEngine'
     ):
         super().__init__(module_id, config)
+
+        # ChatEngine 引用
+        self.chat_engine = chat_engine
 
         # 读取协议通用配置
         self.host = self.config.get("host", "0.0.0.0")
@@ -55,10 +61,87 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
         """停止协议服务"""
         raise NotImplementedError("Protocol 子类必须实现 stop 方法")
 
-    def set_chat_engine(self, chat_engine: 'ChatEngine'):
-        """设置 ChatEngine 引用"""
-        self.chat_engine = chat_engine
-        logger.debug(f"Protocol [{self.module_id}] 设置 ChatEngine")
+    # ==================== 通用协议消息处理 ====================
+
+    async def handle_text_message(self, connection: ConnectionT, raw_message: str):
+        """处理文本消息（通用方法）"""
+        try:
+            if not raw_message.strip().startswith('{'):
+                return
+
+            stream_event = StreamEvent.model_validate_json(raw_message)
+
+            # 判断是否为注册消息
+            if stream_event.event_type == EventType.SYSTEM_CLIENT_SESSION_START:
+                await self._handle_register(connection, stream_event)
+            else:
+                # 路由到 ConversationHandler
+                await self._route_message(connection, stream_event)
+
+        except Exception as e:
+            logger.error(f"Protocol [{self.module_id}] 消息处理失败: {e}")
+
+    async def _handle_register(self, connection: ConnectionT, stream_event: StreamEvent):
+        """处理注册消息（通用方法）"""
+        tag_id = stream_event.tag_id
+
+        # 创建会话映射
+        session_id = self.create_session(connection, tag_id)
+
+        # 调用 ChatEngine 创建 ConversationHandler
+        await self.chat_engine.create_conversation_handler(
+            session_id=session_id,
+            tag_id=tag_id,
+            send_callback=lambda event: self.send_event(session_id, event)
+        )
+
+        # 发送会话确认
+        response = StreamEvent(
+            event_type=EventType.SYSTEM_SERVER_SESSION_START,
+            tag_id=tag_id,
+            session_id=session_id
+        )
+        await self.send_event(session_id, response)
+
+        logger.info(f"Protocol [{self.module_id}] 客户端已注册: tag={tag_id}, session={session_id}")
+
+    async def _route_message(self, connection: ConnectionT, stream_event: StreamEvent):
+        """路由消息到 ConversationHandler（通用方法）"""
+        session_id = self.get_session_id(connection)
+        if not session_id:
+            logger.warning(f"Protocol [{self.module_id}] 未找到会话映射")
+            return
+
+        handler = self.chat_engine.get_conversation_handler(session_id)
+        if not handler:
+            logger.warning(f"Protocol [{self.module_id}] 会话处理器不存在: {session_id}")
+            return
+
+        # 根据事件类型分发
+        if stream_event.event_type == EventType.CLIENT_SPEECH_END:
+            handler.handle_speech_end()
+        elif stream_event.event_type == EventType.STREAM_END:
+            handler.handle_speech_end()
+        elif stream_event.event_type == EventType.CLIENT_TEXT_INPUT:
+            text_data: TextData = stream_event.event_data
+            await handler.handle_text_input(text_data.text)
+
+    async def handle_audio_message(self, connection: ConnectionT, audio_data: bytes):
+        """处理音频消息（通用方法）"""
+        session_id = self.get_session_id(connection)
+        if not session_id:
+            return
+
+        handler = self.chat_engine.get_conversation_handler(session_id)
+        if handler:
+            handler.handle_audio(audio_data)
+
+    async def handle_disconnect(self, connection: ConnectionT):
+        """处理断开连接（通用方法）"""
+        session_id = self.remove_session_by_connection(connection)
+        if session_id:
+            logger.info(f"Protocol [{self.module_id}] 连接断开: session={session_id}")
+            await self.chat_engine.destroy_conversation_handler(session_id)
 
     # ==================== 通用会话管理 ====================
 
