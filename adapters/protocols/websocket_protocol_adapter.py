@@ -213,7 +213,6 @@ class WebSocketProtocolAdapter(BaseProtocol):
 
     async def process_and_send_tts_sentence(self, sentence: str, session_id: str, tts_module: BaseTTS,
                                             is_final: bool = False):
-        # ... 此函数逻辑保持不变 ...
         websocket = self.session_to_websocket.get(session_id)
         if not websocket or self.session_interrupt_flags.get(session_id, False): return
 
@@ -229,7 +228,6 @@ class WebSocketProtocolAdapter(BaseProtocol):
 
     @staticmethod
     def serialize_stream_event_with_audio(event: StreamEvent):
-        # ... 此函数逻辑保持不变 ...
         event_dict = event.model_dump()
         raw_data_bytes = event_dict['event_data']['data']
         base64_encoded_data = base64.b64encode(raw_data_bytes).decode('utf-8')
@@ -238,7 +236,6 @@ class WebSocketProtocolAdapter(BaseProtocol):
 
     @staticmethod
     async def _send_to_client(client_websocket, message: str):
-        # ... 此函数逻辑保持不变 ...
         try:
             await client_websocket.send(message)
         except websockets.exceptions.ConnectionClosed:
@@ -247,13 +244,11 @@ class WebSocketProtocolAdapter(BaseProtocol):
             logger.error(f"Failed to send message to client: {e}")
 
     async def initialize(self):
-        # ... 此函数逻辑保持不变 ...
         self.server = await websockets.serve(self._handle_client, self.host, self.port)
         print(f"[服务器] WebSocket 服务器已在 ws://{self.host}:{self.port} 启动。")
         await self.server.wait_closed()
 
     async def close(self):
-        # ... 此函数逻辑保持不变 ...
         if self.server:
             self.server.close()
             await self.server.wait_closed()
