@@ -4,3 +4,6 @@ models
 tests
 *.pcm
 *.wav
+
+/tmp
+**/__pycache__
