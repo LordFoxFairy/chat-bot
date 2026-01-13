@@ -7,7 +7,7 @@ from data_models import StreamEvent, EventType, TextData
 from modules import BaseLLM, BaseTTS, BaseVAD, BaseASR
 from core.session_context import SessionContext
 from core.session_manager import session_manager
-from handlers import AudioInputHandler
+from handlers import AudioInputHandler, TextInputHandler
 from utils.logging_setup import logger
 
 
@@ -47,11 +47,12 @@ class ConversationHandler:
 
         # 业务组件
         self.audio_input: Optional[AudioInputHandler] = None
+        self.text_input: Optional[TextInputHandler] = None
 
         logger.info(f"ConversationHandler 创建: session={session_id}")
 
     async def start(self):
-        """启动对话处理器 - 创建 SessionContext 和 AudioInputHandler"""
+        """启动对话处理器 - 创建 SessionContext 和输入处理器"""
         # 创建 SessionContext
         session_ctx = SessionContext(
             session_id=self.session_id,
@@ -63,11 +64,17 @@ class ConversationHandler:
         # 创建 AudioInputHandler（会从 session_ctx 获取模块）
         self.audio_input = AudioInputHandler(
             session_context=session_ctx,
-            result_callback=self._on_asr_result,
+            result_callback=self._on_input_result,
             silence_timeout=self.DEFAULT_SILENCE_TIMEOUT,
             max_buffer_duration=self.DEFAULT_MAX_BUFFER_DURATION,
         )
         self.audio_input.start()
+
+        # 创建 TextInputHandler
+        self.text_input = TextInputHandler(
+            session_context=session_ctx,
+            result_callback=self._on_input_result
+        )
 
         logger.info(f"ConversationHandler 启动完成: session={self.session_id}")
 
@@ -106,29 +113,27 @@ class ConversationHandler:
 
     async def handle_text_input(self, text: str):
         """处理文本输入（不打断）"""
-        self.turn_context['last_user_text'] = text
-        self.turn_context['was_interrupted'] = False
+        if self.text_input:
+            await self.text_input.process_text(text)
 
-        await self._trigger_conversation(text)
-
-    async def _on_asr_result(
+    async def _on_input_result(
         self,
-        asr_event: StreamEvent,
+        input_event: StreamEvent,
         metadata: Optional[Dict]
     ):
-        """ASR 回调 - 处理识别结果"""
-        text_data: TextData = asr_event.event_data
+        """输入结果回调 - 处理 ASR 或文本输入的结果"""
+        text_data: TextData = input_event.event_data
 
         if not text_data.is_final:
             return
 
         # 空结果，重置打断标志
         if not text_data.text:
-            logger.debug(f"ConversationHandler ASR 结果为空: session={self.session_id}")
+            logger.debug(f"ConversationHandler 输入结果为空: session={self.session_id}")
             self.turn_context['was_interrupted'] = False
             return
 
-        # 处理打断场景
+        # 处理打断场景（仅音频输入有打断逻辑）
         if self.turn_context['was_interrupted']:
             # 拼接上一轮和本轮文本
             combined_text = f"{self.turn_context.get('last_user_text', '')} {text_data.text}".strip()
