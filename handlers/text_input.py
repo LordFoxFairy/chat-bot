@@ -1,7 +1,7 @@
 from typing import Callable, Awaitable, Optional, Dict
 
 from core.session_context import SessionContext
-from data_models import StreamEvent, EventType, TextData
+from models import StreamEvent, EventType, TextData
 from utils.logging_setup import logger
 
 

@@ -8,7 +8,7 @@ from typing import Callable, Awaitable, Optional
 from modules.base_vad import BaseVAD
 from modules.base_asr import BaseASR
 from core.session_context import SessionContext
-from data_models import StreamEvent, EventType, AudioData, AudioFormat, TextData
+from models import StreamEvent, EventType, AudioData, AudioFormat, TextData
 from utils.logging_setup import logger
 
 

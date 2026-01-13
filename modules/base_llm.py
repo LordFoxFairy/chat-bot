@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from typing import Dict, Any, AsyncGenerator
 
-from data_models import TextData
+from models import TextData
 from modules.base_module import BaseModule
 from utils.logging_setup import logger
 

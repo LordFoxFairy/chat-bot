@@ -17,7 +17,7 @@ if PROJECT_ROOT not in sys.path:
 logger.info(f"項目根目錄 '{PROJECT_ROOT}' 已添加到sys.path。")
 
 # --- 核心框架组件导入 ---
-from data_models import AudioData, TextData, AudioFormat
+from models import AudioData, TextData, AudioFormat
 from utils.config_loader import ConfigLoader
 from modules.base_asr import BaseASR  # 用於類型提示
 # 直接導入要測試的適配器

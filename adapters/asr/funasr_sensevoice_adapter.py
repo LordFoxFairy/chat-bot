@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 import numpy as np
 
 from core.exceptions import ModuleInitializationError, ModuleProcessingError
-from data_models import AudioData
+from models import AudioData
 from modules.base_asr import BaseASR
 from utils.audio_converter import convert_audio_format
 from utils.logging_setup import logger

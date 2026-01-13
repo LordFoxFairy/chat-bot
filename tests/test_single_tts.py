@@ -9,7 +9,7 @@ import yaml  # 導入 PyYAML 庫
 from typing import Dict, Any, Optional
 
 # 假設導入路徑已正確設置
-from data_models.text_data import TextData
+from models.text_data import TextData
 # from data_models.audio_data import AudioData # 主要用於類型提示，測試依賴 BaseTTS 保存
 from adapters.tts.edge_tts_adapter import EdgeTTSAdapter
 from utils.config_loader import ConfigLoader

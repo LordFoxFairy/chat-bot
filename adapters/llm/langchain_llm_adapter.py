@@ -4,7 +4,7 @@ from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AI
 from langchain_openai import ChatOpenAI
 
 from core.exceptions import ModuleInitializationError, ModuleProcessingError
-from data_models import TextData
+from models import TextData
 from modules.base_llm import BaseLLM
 from utils.logging_setup import logger
 

@@ -1,6 +1,6 @@
 from typing import Dict, Optional, Callable, Awaitable
 
-from data_models import StreamEvent
+from models import StreamEvent
 from utils.logging_setup import logger
 from .conversation import ConversationHandler
 

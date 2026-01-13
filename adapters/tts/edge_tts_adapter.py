@@ -1,7 +1,7 @@
 from typing import AsyncGenerator, Optional, Dict, Any
 
 from core.exceptions import ModuleInitializationError, ModuleProcessingError
-from data_models import AudioData, TextData, AudioFormat
+from models import AudioData, TextData, AudioFormat
 from modules.base_tts import BaseTTS
 from utils.logging_setup import logger
 

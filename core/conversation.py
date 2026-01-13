@@ -3,7 +3,7 @@ import re
 from typing import Optional, Dict, Callable, Awaitable
 
 import constant
-from data_models import StreamEvent, EventType, TextData
+from models import StreamEvent, EventType, TextData
 from modules import BaseLLM, BaseTTS, BaseVAD, BaseASR
 from core.session_context import SessionContext
 from core.session_manager import session_manager

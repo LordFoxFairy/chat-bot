@@ -2,7 +2,7 @@ from abc import abstractmethod
 from typing import Dict, Any, AsyncGenerator
 
 from core.exceptions import ModuleProcessingError
-from data_models import AudioData, TextData
+from models import AudioData, TextData
 from modules.base_module import BaseModule
 from utils.logging_setup import logger
 

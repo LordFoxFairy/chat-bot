@@ -3,7 +3,7 @@ from typing import Dict, Any, Optional, TypeVar, Generic
 import uuid
 
 from modules.base_module import BaseModule
-from data_models import StreamEvent, EventType, TextData
+from models import StreamEvent, EventType, TextData
 from utils.logging_setup import logger
 
 

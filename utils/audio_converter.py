@@ -5,7 +5,7 @@ from typing import Optional
 import numpy as np
 from pydub import AudioSegment
 from pydub.exceptions import CouldntDecodeError
-from data_models import AudioData, AudioFormat
+from models import AudioData, AudioFormat
 
 
 def convert_audio_format(

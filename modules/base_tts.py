@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from typing import AsyncGenerator, Dict, Any
 
-from data_models import AudioData, TextData
+from models import AudioData, TextData
 from modules.base_module import BaseModule
 from utils.logging_setup import logger
 
@@ -62,7 +62,7 @@ class BaseTTS(BaseModule):
                 f"TTS [{self.module_id}] (Session: {session_id}) 合成失败: {e}",
                 exc_info=True
             )
-            from data_models import AudioFormat
+            from models import AudioFormat
             yield AudioData(
                 data=b"",
                 format=AudioFormat.MP3,
