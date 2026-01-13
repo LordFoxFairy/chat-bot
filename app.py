@@ -20,8 +20,7 @@ async def main():
     config_path = os.path.join(os.path.dirname(__file__), 'configs', 'config.yaml')
 
     try:
-        config_loader = ConfigLoader()
-        config = config_loader.load_config(config_path)
+        config = await ConfigLoader.load_config(config_path)
         if not config:
             logger.critical(f"错误: 从 '{config_path}' 加载配置失败。")
             return
