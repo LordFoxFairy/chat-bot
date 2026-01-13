@@ -134,7 +134,7 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
 
         handler = self.conversation_manager.get_conversation_handler(session_id)
         if handler:
-            handler.handle_audio(audio_data)
+            await handler.handle_audio(audio_data)
 
     async def handle_disconnect(self, connection: ConnectionT):
         """处理断开连接（通用方法）"""

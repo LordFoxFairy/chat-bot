@@ -84,8 +84,12 @@ class ConversationHandler:
 
         # 停止 AudioInputHandler
         if self.audio_input:
-            self.audio_input.stop()
+            await self.audio_input.stop()
             self.audio_input = None
+
+        # 清理 TextInputHandler
+        if self.text_input:
+            self.text_input = None
 
         # 清理状态
         self.turn_context.clear()

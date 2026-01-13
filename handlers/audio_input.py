@@ -32,6 +32,7 @@ class AudioInputHandler:
     DEFAULT_MIN_SEGMENT_THRESHOLD = 0.3
     DEFAULT_CHECK_INTERVAL = 0.2
     DEFAULT_BYTES_PER_SECOND = 32000  # 16kHz, 单声道, 16bit
+    MAX_BUFFER_SIZE = 10 * 1024 * 1024  # 10MB 最大缓冲区
 
     # 文本清洗正则
     SPECIAL_TOKENS_PATTERN = re.compile(r'<\|.*?\|>')
@@ -75,10 +76,14 @@ class AudioInputHandler:
             self.monitor_task = asyncio.create_task(self._monitor_loop())
             logger.info(f"[AudioInput] Started for session {self.session_context.session_id}")
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """停止音频处理"""
         if self.monitor_task:
             self.monitor_task.cancel()
+            try:
+                await self.monitor_task
+            except asyncio.CancelledError:
+                pass
             self.monitor_task = None
             logger.info(f"[AudioInput] Stopped for session {self.session_context.session_id}")
 
@@ -93,6 +98,15 @@ class AudioInputHandler:
 
         if is_speech:
             async with self.buffer_lock:
+                # 检查缓冲区大小限制
+                current_size = sum(len(c) for c in self.audio_buffer)
+                if current_size + len(chunk) > self.MAX_BUFFER_SIZE:
+                    logger.warning(
+                        f"[AudioInput] Buffer overflow risk, clearing buffer. "
+                        f"session={self.session_context.session_id}, size={current_size}"
+                    )
+                    self.audio_buffer.clear()
+
                 self.audio_buffer.append(chunk)
                 self.last_speech_time = time.time()
             logger.debug(f"[AudioInput] Speech detected, session={self.session_context.session_id}")
