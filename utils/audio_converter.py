@@ -8,102 +8,95 @@ from pydub.exceptions import CouldntDecodeError
 from data_models import AudioData, AudioFormat
 
 
-def convert_to_target_format(
-        audio_input: AudioData,
-        target_sample_rate: int,
-        target_channels: int,
-        target_sample_width: int,  # 通常為 2 (16-bit)
-        target_format_for_asr: str = "pcm_f32le"  # ASR期望的內部格式, pcm_f32le 指 float32 little-endian
+def convert_audio_format(
+        audio: AudioData,
+        sample_rate: int,
+        channels: int,
+        sample_width: int,  # 通常为 2 (16-bit)
+        output_format: str = "pcm_f32le"  # ASR期望的内部格式, pcm_f32le 指 float32 little-endian
 ) -> Optional[np.ndarray]:
-    """
-    將輸入的 AudioData 對象轉換為 ASR 模型期望的標準格式 (NumPy float32 數組)。
+    """将音频转换为 ASR 模型需要的格式
 
-    參數:
-        audio_input (AudioData): 包含原始音頻數據和格式信息的對象。
-        target_sample_rate (int): 目標採樣率 (Hz)。
-        target_channels (int): 目標通道数 (例如 1 代表單聲道)。
-        target_sample_width (int): 目標樣本寬度 (字節，例如 2 代表 16-bit)。
-        target_format_for_asr (str): 指示ASR模型期望的NumPy數組類型和格式。
-                                     "pcm_f32le" 表示 float32 PCM。
+    Args:
+        audio: 输入音频数据
+        sample_rate: 目标采样率 (Hz)
+        channels: 目标通道数 (1=单声道)
+        sample_width: 目标样本宽度 (字节，2=16bit)
+        output_format: 输出格式 ("pcm_f32le" 或 "pcm_s16le")
 
-    返回:
-        Optional[np.ndarray]: 轉換後的 float32 NumPy 數組，如果轉換失敗則返回 None。
+    Returns:
+        转换后的 NumPy 数组，失败返回 None
     """
     if not pydub:
-        logger.error("音頻轉換失敗: 'pydub' 庫未安裝。請運行 'pip install pydub'。")
+        logger.error("音频转换失败: 'pydub' 库未安装。请运行 'pip install pydub'。")
         return None
     if not AudioSegment or not CouldntDecodeError:
-        logger.error("音頻轉換失敗: 'pydub' 庫組件未能正確導入。")
+        logger.error("音频转换失败: 'pydub' 库组件未能正确导入。")
         return None
-    if not audio_input.data:
-        logger.warning("輸入的音頻數據為空，無法轉換。")
+    if not audio.data:
+        logger.warning("输入的音频数据为空，无法转换。")
         return np.array([], dtype=np.float32)
 
     try:
-        # 1. 從字節加載音頻數據
-        # 如果是 PCM 格式，需要提供額外的元數據給 pydub
-        if audio_input.format == AudioFormat.PCM:
+        # 1. 从字节加载音频数据
+        # 如果是 PCM 格式，需要提供额外的元数据给 pydub
+        if audio.format == AudioFormat.PCM:
             logger.debug(
-                f"從 PCM 數據加載: sr={audio_input.sample_rate}, ch={audio_input.channels}, sw={audio_input.sample_width}")
+                f"从 PCM 数据加载: sr={audio.sample_rate}, ch={audio.channels}, sw={audio.sample_width}")
             segment = AudioSegment(
-                data=audio_input.data,
-                sample_width=audio_input.sample_width,
-                frame_rate=audio_input.sample_rate,
-                channels=audio_input.channels
+                data=audio.data,
+                sample_width=audio.sample_width,
+                frame_rate=audio.sample_rate,
+                channels=audio.channels
             )
         else:
-            # 對於其他格式 (如 wav, mp3, opus)，pydub 可以從文件頭讀取元數據
-            logger.debug(f"從文件格式 '{audio_input.format.value}' 加載音頻數據。")
+            # 对于其他格式 (如 wav, mp3, opus)，pydub 可以从文件头读取元数据
+            logger.debug(f"从文件格式 '{audio.format.value}' 加载音频数据。")
             segment = AudioSegment.from_file(
-                io.BytesIO(audio_input.data),
-                format=audio_input.format.value
+                io.BytesIO(audio.data),
+                format=audio.format.value
             )
 
-        # 2. 轉換採樣率
-        if segment.frame_rate != target_sample_rate:
-            logger.debug(f"轉換採樣率: {segment.frame_rate} Hz -> {target_sample_rate} Hz")
-            segment = segment.set_frame_rate(target_sample_rate)
+        # 2. 转换采样率
+        if segment.frame_rate != sample_rate:
+            logger.debug(f"转换采样率: {segment.frame_rate} Hz -> {sample_rate} Hz")
+            segment = segment.set_frame_rate(sample_rate)
 
-        # 3. 轉換通道數
-        if segment.channels != target_channels:
-            logger.debug(f"轉換通道數: {segment.channels} -> {target_channels}")
-            segment = segment.set_channels(target_channels)
+        # 3. 转换通道数
+        if segment.channels != channels:
+            logger.debug(f"转换通道数: {segment.channels} -> {channels}")
+            segment = segment.set_channels(channels)
 
-        # 4. 轉換樣本寬度 (pydub 內部處理，導出為16-bit PCM 以便轉為 np.int16)
-        if segment.sample_width != target_sample_width:
-            logger.debug(f"轉換樣本寬度: {segment.sample_width} bytes -> {target_sample_width} bytes")
-            segment = segment.set_sample_width(target_sample_width)
+        # 4. 转换样本宽度 (pydub 内部处理，导出为16-bit PCM 以便转为 np.int16)
+        if segment.sample_width != sample_width:
+            logger.debug(f"转换样本宽度: {segment.sample_width} bytes -> {sample_width} bytes")
+            segment = segment.set_sample_width(sample_width)
 
-        # 5. 獲取原始 PCM 數據 (應為目標樣本寬度，例如 16-bit)
-        pcm_data_target_width = segment.raw_data
+        # 5. 获取原始 PCM 数据 (应为目标样本宽度，例如 16-bit)
+        pcm_data = segment.raw_data
 
-        # 6. 轉換為 NumPy 數組 (基於目標樣本寬度)
-        dtype_for_numpy = np.int16  # 假設 target_sample_width 為 2 (16-bit)
-        if target_sample_width == 1:
-            dtype_for_numpy = np.int8  # type: ignore
-        elif target_sample_width == 4:  # 例如 32-bit int PCM
-            dtype_for_numpy = np.int32  # type: ignore
+        # 6. 转换为 NumPy 数组 (基于目标样本宽度)
+        dtype_map = {1: np.int8, 2: np.int16, 4: np.int32}
+        dtype = dtype_map.get(sample_width, np.int16)
+        audio_np = np.frombuffer(pcm_data, dtype=dtype)
 
-        audio_np_intermediate = np.frombuffer(pcm_data_target_width, dtype=dtype_for_numpy)
-
-        # 7. 如果 ASR 期望 float32，則進行轉換
-        if target_format_for_asr == "pcm_f32le":
-            # 將 int 類型數組轉換為 float32
-            # 如果原始是 int16，除以 32768.0 進行歸一化 (可選，取決於模型期望)
-            # FunASR SenseVoice 通常期望未歸一化的 float32，所以這裡不進行除法操作
-            audio_np_float32 = audio_np_intermediate.astype(np.float32)
-            logger.debug(f"成功將音頻轉換為 float32 NumPy 數組，形狀: {audio_np_float32.shape}")
-            return audio_np_float32
-        elif target_format_for_asr == "pcm_s16le" and target_sample_width == 2:
-            logger.debug(f"成功將音頻轉換為 int16 NumPy 數組，形狀: {audio_np_intermediate.shape}")
-            return audio_np_intermediate  # 已經是 int16
+        # 7. 如果 ASR 期望 float32，则进行转换
+        if output_format == "pcm_f32le":
+            # 将 int 类型数组转换为 float32
+            # FunASR SenseVoice 通常期望未归一化的 float32，所以这里不进行除法操作
+            audio_float32 = audio_np.astype(np.float32)
+            logger.debug(f"成功将音频转换为 float32 NumPy 数组，形状: {audio_float32.shape}")
+            return audio_float32
+        elif output_format == "pcm_s16le" and sample_width == 2:
+            logger.debug(f"成功将音频转换为 int16 NumPy 数组，形状: {audio_np.shape}")
+            return audio_np  # 已经是 int16
         else:
-            logger.error(f"不支持的目標 ASR 格式 '{target_format_for_asr}' 或與目標樣本寬度不匹配。")
+            logger.error(f"不支持的目标 ASR 格式 '{output_format}' 或与目标样本宽度不匹配。")
             return None
 
     except CouldntDecodeError as e:
-        logger.error(f"無法解碼音頻數據 (格式: {audio_input.format.value}): {e}")
+        logger.error(f"无法解码音频数据 (格式: {audio.format.value}): {e}")
         return None
     except Exception as e:
-        logger.error(f"音頻轉換過程中發生未知錯誤: {e}", exc_info=True)
+        logger.error(f"音频转换过程中发生未知错误: {e}", exc_info=True)
         return None

@@ -8,7 +8,7 @@ import numpy as np
 from core.exceptions import ModuleInitializationError, ModuleProcessingError
 from data_models import AudioData
 from modules.base_asr import BaseASR
-from utils.audio_converter import convert_to_target_format
+from utils.audio_converter import convert_audio_format
 from utils.logging_setup import logger
 
 # 动态导入 FunASR
@@ -131,12 +131,12 @@ class FunASRSenseVoiceAdapter(BaseASR):
 
     def _preprocess(self, audio: AudioData) -> Optional[np.ndarray]:
         """预处理音频数据，将 AudioData 转换为模型所需的格式"""
-        return convert_to_target_format(
-            audio_input=audio,
-            target_sample_rate=self.sample_rate,
-            target_channels=self.channels,
-            target_sample_width=2,
-            target_format_for_asr="pcm_f32le"
+        return convert_audio_format(
+            audio=audio,
+            sample_rate=self.sample_rate,
+            channels=self.channels,
+            sample_width=2,
+            output_format="pcm_f32le"
         )
 
     async def _infer(self, audio_array: np.ndarray) -> Any:
