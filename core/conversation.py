@@ -58,7 +58,7 @@ class ConversationHandler:
             tag_id=self.tag_id,
             engine=self.chat_engine
         )
-        session_manager.create_session(session_ctx)
+        await session_manager.create_session(session_ctx)
 
         # 创建 AudioInputHandler（会从 session_ctx 获取模块）
         self.audio_input = AudioInputHandler(
@@ -99,7 +99,7 @@ class ConversationHandler:
         if self.audio_input:
             await self.audio_input.process_chunk(audio_data)
 
-    def handle_speech_end(self):
+    async def handle_speech_end(self):
         """处理语音结束信号"""
         if self.audio_input:
             self.audio_input.signal_client_speech_end()
@@ -155,7 +155,7 @@ class ConversationHandler:
     async def _trigger_conversation(self, user_text: str):
         """触发对话流程: LLM → TTS"""
         # 从当前会话获取模块
-        session_ctx = session_manager.get_session(self.session_id)
+        session_ctx = await session_manager.get_session(self.session_id)
         llm_module: BaseLLM = session_ctx.get_module("llm")
         tts_module: BaseTTS = session_ctx.get_module("tts")
 

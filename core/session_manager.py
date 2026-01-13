@@ -43,13 +43,13 @@ class SessionManager:
     def __init__(self, storage_backend: StorageBackend):
         self.storage = storage_backend
 
-    def create_session(self, context: 'SessionContext') -> 'SessionContext':
+    async def create_session(self, context: 'SessionContext') -> 'SessionContext':
         """创建会话"""
         self.storage.set(context.session_id, context)
         logger.info(f"[SessionManager] 创建会话: {context.session_id}")
         return context
 
-    def get_session(self, session_id: str) -> Optional['SessionContext']:
+    async def get_session(self, session_id: str) -> Optional['SessionContext']:
         """获取会话"""
         return self.storage.get(session_id)
 

@@ -119,9 +119,9 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
 
         # 根据事件类型分发
         if stream_event.event_type == EventType.CLIENT_SPEECH_END:
-            handler.handle_speech_end()
+            await handler.handle_speech_end()
         elif stream_event.event_type == EventType.STREAM_END:
-            handler.handle_speech_end()
+            await handler.handle_speech_end()
         elif stream_event.event_type == EventType.CLIENT_TEXT_INPUT:
             text_data: TextData = stream_event.event_data
             await handler.handle_text_input(text_data.text)
