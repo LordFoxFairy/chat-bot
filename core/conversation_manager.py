@@ -3,6 +3,7 @@ from typing import Dict, Optional, Callable, Awaitable
 from models import StreamEvent
 from utils.logging_setup import logger
 from .conversation import ConversationHandler
+from .session_manager import SessionManager
 
 
 class ConversationManager:
@@ -15,8 +16,9 @@ class ConversationManager:
     - 不涉及模块管理（由 ChatEngine 负责）
     """
 
-    def __init__(self, chat_engine: 'ChatEngine'):
+    def __init__(self, chat_engine: 'ChatEngine', session_manager: SessionManager):
         self.chat_engine = chat_engine
+        self.session_manager = session_manager
         self.conversation_handlers: Dict[str, ConversationHandler] = {}
         logger.info("ConversationManager 初始化完成")
 
@@ -44,6 +46,7 @@ class ConversationManager:
             session_id=session_id,
             tag_id=tag_id,
             chat_engine=self.chat_engine,
+            session_manager=self.session_manager,
             send_callback=send_callback
         )
         await handler.start()

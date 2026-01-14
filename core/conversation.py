@@ -6,7 +6,7 @@ import constant
 from models import StreamEvent, EventType, TextData
 from modules import BaseLLM, BaseTTS, BaseVAD, BaseASR
 from core.session_context import SessionContext
-from core.session_manager import session_manager
+from core.session_manager import SessionManager
 from handlers import AudioInputHandler, TextInputHandler
 from utils.logging_setup import logger
 
@@ -31,11 +31,13 @@ class ConversationHandler:
         session_id: str,
         tag_id: str,
         chat_engine: 'ChatEngine',
+        session_manager: SessionManager,
         send_callback: Callable[[StreamEvent], Awaitable[None]]
     ):
         self.session_id = session_id
         self.tag_id = tag_id
         self.chat_engine = chat_engine
+        self.session_manager = session_manager
         self.send_callback = send_callback
 
         # 对话状态
@@ -59,7 +61,7 @@ class ConversationHandler:
             tag_id=self.tag_id,
             engine=self.chat_engine
         )
-        await session_manager.create_session(session_ctx)
+        await self.session_manager.create_session(session_ctx)
 
         # 创建 AudioInputHandler（会从 session_ctx 获取模块）
         self.audio_input = AudioInputHandler(
@@ -164,7 +166,7 @@ class ConversationHandler:
     async def _trigger_conversation(self, user_text: str):
         """触发对话流程: LLM → TTS"""
         # 从当前会话获取模块
-        session_ctx = await session_manager.get_session(self.session_id)
+        session_ctx = await self.session_manager.get_session(self.session_id)
         llm_module: BaseLLM = session_ctx.get_module("llm")
         tts_module: BaseTTS = session_ctx.get_module("tts")
 

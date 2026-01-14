@@ -5,7 +5,7 @@ import constant
 from utils.logging_setup import logger
 from utils.module_initialization_utils import initialize_single_module_instance
 from .session_context import SessionContext
-from .session_manager import session_manager
+from .session_manager import SessionManager
 from .conversation_manager import ConversationManager
 
 # 导入模块工厂函数
@@ -31,19 +31,25 @@ class ChatEngine:
     def __init__(
         self,
         config: Dict[str, Any],
+        session_manager: SessionManager,
         loop: Optional[asyncio.AbstractEventLoop] = None
     ):
         self.global_config = config
         self.loop = loop if loop else asyncio.get_event_loop()
+        self.session_manager = session_manager
 
         # 模块存储
         self.common_modules: Dict[str, BaseModule] = {}  # ASR, LLM, TTS, VAD
         self.protocol_modules: Dict[str, BaseProtocol] = {}  # Protocols
 
-        # 会话管理器
-        self.conversation_manager = ConversationManager(chat_engine=self)
+        # 会话管理器 - 不在这里创建，通过依赖注入
+        self.conversation_manager: Optional[ConversationManager] = None
 
         logger.info("ChatEngine 初始化完成")
+
+    def set_conversation_manager(self, conversation_manager: ConversationManager):
+        """设置会话管理器（依赖注入）"""
+        self.conversation_manager = conversation_manager
 
     async def initialize(self):
         """异步初始化 ChatEngine，加载所有模块"""

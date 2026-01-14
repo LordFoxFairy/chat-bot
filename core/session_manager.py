@@ -58,6 +58,4 @@ class SessionManager:
         self.storage.close()
 
 
-# 全局 session_manager 实例
-in_memory_backend = InMemoryStorage(maxsize=10000)
-session_manager = SessionManager(storage_backend=in_memory_backend)
+# 注意：不再创建全局实例，改为在 app.py 中通过依赖注入创建

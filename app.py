@@ -9,6 +9,8 @@ from utils.logging_setup import logger
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from core.chat_engine import ChatEngine
+from core.session_manager import SessionManager, InMemoryStorage
+from core.conversation_manager import ConversationManager
 
 
 async def main():
@@ -20,15 +22,35 @@ async def main():
     config_path = os.path.join(os.path.dirname(__file__), 'configs', 'config.yaml')
 
     try:
+        # 1. 加载配置
         config = await ConfigLoader.load_config(config_path)
         if not config:
             logger.critical(f"错误: 从 '{config_path}' 加载配置失败。")
             return
-        await ChatEngine(config).initialize()
+
+        # 2. 创建 SessionManager（依赖注入）
+        storage_backend = InMemoryStorage(maxsize=10000)
+        session_manager = SessionManager(storage_backend=storage_backend)
+
+        # 3. 创建 ChatEngine（依赖注入 SessionManager）
+        chat_engine = ChatEngine(config=config, session_manager=session_manager)
+
+        # 4. 创建 ConversationManager（依赖注入 ChatEngine 和 SessionManager）
+        conversation_manager = ConversationManager(
+            chat_engine=chat_engine,
+            session_manager=session_manager
+        )
+
+        # 5. 反向注入 ConversationManager 到 ChatEngine
+        chat_engine.set_conversation_manager(conversation_manager)
+
+        # 6. 初始化模块
+        await chat_engine.initialize()
+
         logger.info("[服务器] 主异步循环将运行，等待客户端连接和消息...")
 
     except Exception as e:
-        logger.info(f"错误: 应用程序启动或运行期间发生错误: {e}")
+        logger.error(f"错误: 应用程序启动或运行期间发生错误: {e}", exc_info=True)
         sys.exit(1)
 
     logger.info("--- 应用程序已停止 ---")
