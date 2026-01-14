@@ -41,11 +41,8 @@ async def main():
             session_manager=session_manager
         )
 
-        # 5. 反向注入 ConversationManager 到 ChatEngine
-        chat_engine.set_conversation_manager(conversation_manager)
-
-        # 6. 初始化模块
-        await chat_engine.initialize()
+        # 5. 初始化模块（传入 ConversationManager 用于 Protocol 初始化）
+        await chat_engine.initialize(conversation_manager=conversation_manager)
 
         logger.info("[服务器] 主异步循环将运行，等待客户端连接和消息...")
 
