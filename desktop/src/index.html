@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,13 +8,38 @@
 </head>
 <body>
     <div class="chat-container">
-        <div id="status-bar" class="status-disconnected">Connecting...</div>
+        <!-- Header -->
+        <div class="header">
+            <div class="header-title">Chat Bot</div>
+            <div id="status-indicator" class="status-indicator disconnected">
+                <span class="status-dot"></span>
+                <span id="status-text">Connecting...</span>
+            </div>
+        </div>
+
+        <!-- Messages Area -->
         <div id="messages" class="messages-area"></div>
+
+        <!-- ASR Transcription Preview -->
+        <div id="asr-preview" class="asr-preview hidden"></div>
+
+        <!-- Input Area -->
         <div class="input-area">
+            <button id="mic-btn" class="mic-btn" title="Hold to speak">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                </svg>
+            </button>
             <input type="text" id="message-input" placeholder="Type a message..." autofocus>
-            <button id="send-btn">Send</button>
+            <button id="send-btn" class="send-btn" title="Send message">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                </svg>
+            </button>
         </div>
     </div>
-    <script src="main.js"></script>
+
+    <script type="module" src="main.js"></script>
 </body>
 </html>

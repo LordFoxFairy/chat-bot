@@ -1,24 +1,54 @@
 [project]
 name = "chat-bot"
 version = "0.1.0"
-description = "Add your description here"
+description = "AI Voice Chat Bot with ASR, LLM, and TTS integration"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    # Core dependencies
     "aiofiles>=25.1.0",
     "cachetools>=6.2.4",
-    "edge-tts>=7.2.7",
+    "numpy>=2.4.1",
+    "pydantic>=2.12.5",
+    "pyyaml>=6.0.3",
+    "websockets>=16.0",
+
+    # LangChain ecosystem
     "langchain>=1.0.0",
     "langchain-core>=1.0.0",
     "langchain-openai>=1.0.0",
+    "langchain-anthropic>=0.3.0",
     "langgraph>=1.0.0",
-    "numpy>=2.4.1",
-    "pydantic>=2.12.5",
+
+    # TTS
+    "edge-tts>=7.2.7",
     "pydub>=0.25.1",
+
+    # ASR (FunASR)
+    "funasr>=1.2.0",
+    "modelscope>=1.20.0",
+
+    # VAD
+    "torch>=2.0.0",
+    "torchaudio>=2.0.0",
+
+    # Audio processing
+    "soundfile>=0.13.0",
+    "librosa>=0.10.0",
+]
+
+[project.optional-dependencies]
+dev = [
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
-    "pyyaml>=6.0.3",
-    "websockets>=16.0",
+    "pytest-cov>=6.0.0",
+    "black>=25.0.0",
+    "ruff>=0.11.0",
+    "mypy>=1.15.0",
+]
+build = [
+    "pyinstaller>=6.0.0",
+    "nuitka>=2.0.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -32,3 +62,23 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.black]
+line-length = 100
+target-version = ["py313"]
+include = '\.pyi?$'
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "B", "C4"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true

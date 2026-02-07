@@ -1,49 +1,451 @@
-// Tauri WebSocket handling
-const ws = new WebSocket('ws://localhost:8000');
-const statusDiv = document.getElementById('status-bar');
-const messagesDiv = document.getElementById('messages');
-const input = document.getElementById('message-input');
+/**
+ * Chat Bot Desktop Client
+ * Handles WebSocket communication, audio recording/playback, and UI
+ */
+
+// Configuration
+const CONFIG = {
+    wsUrl: 'ws://localhost:8765',
+    reconnectDelay: 3000,
+    maxReconnectAttempts: 10,
+    audioSampleRate: 16000,
+    audioChannels: 1,
+};
+
+// State
+let ws = null;
+let sessionId = null;
+let isRecording = false;
+let mediaRecorder = null;
+let audioContext = null;
+let audioProcessor = null;
+let mediaStream = null;
+let reconnectAttempts = 0;
+let reconnectTimer = null;
+let currentBotMessage = null;
+let audioQueue = [];
+let isPlayingAudio = false;
+
+// DOM Elements
+const statusIndicator = document.getElementById('status-indicator');
+const statusText = document.getElementById('status-text');
+const messagesArea = document.getElementById('messages');
+const asrPreview = document.getElementById('asr-preview');
+const messageInput = document.getElementById('message-input');
 const sendBtn = document.getElementById('send-btn');
+const micBtn = document.getElementById('mic-btn');
 
-ws.onopen = () => {
-  statusDiv.textContent = 'Status: Connected';
-  statusDiv.className = 'status-connected';
-};
-
-ws.onclose = () => {
-  statusDiv.textContent = 'Status: Disconnected';
-  statusDiv.className = 'status-disconnected';
-};
-
-ws.onmessage = (event) => {
-  const message = event.data;
-  const msgDiv = document.createElement('div');
-  msgDiv.className = 'message message-bot';
-  // Attempt to parse JSON if possible, otherwise treat as plain text
-  try {
-      const data = JSON.parse(message);
-      msgDiv.textContent = data.content || data.text || JSON.stringify(data);
-  } catch (e) {
-      msgDiv.textContent = message;
-  }
-  messagesDiv.appendChild(msgDiv);
-  messagesDiv.scrollTop = messagesDiv.scrollHeight;
-};
-
-sendBtn.addEventListener('click', sendMessage);
-input.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') sendMessage();
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    connectWebSocket();
+    setupEventListeners();
 });
 
-function sendMessage() {
-  const text = input.value.trim();
-  if (text) {
-      ws.send(JSON.stringify({ type: 'text', content: text }));
-      const msgDiv = document.createElement('div');
-      msgDiv.className = 'message message-user';
-      msgDiv.textContent = text;
-      messagesDiv.appendChild(msgDiv);
-      input.value = '';
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
-  }
+// WebSocket Connection
+function connectWebSocket() {
+    if (ws && ws.readyState === WebSocket.OPEN) return;
+
+    updateStatus('connecting', 'Connecting...');
+
+    try {
+        ws = new WebSocket(CONFIG.wsUrl);
+        ws.binaryType = 'arraybuffer';
+
+        ws.onopen = handleWebSocketOpen;
+        ws.onclose = handleWebSocketClose;
+        ws.onerror = handleWebSocketError;
+        ws.onmessage = handleWebSocketMessage;
+    } catch (error) {
+        console.error('WebSocket connection error:', error);
+        scheduleReconnect();
+    }
 }
+
+function handleWebSocketOpen() {
+    console.log('WebSocket connected');
+    updateStatus('connected', 'Connected');
+    reconnectAttempts = 0;
+
+    // Send session registration
+    sendEvent('SYSTEM_CLIENT_SESSION_START', {});
+}
+
+function handleWebSocketClose(event) {
+    console.log('WebSocket closed:', event.code, event.reason);
+    updateStatus('disconnected', 'Disconnected');
+    sessionId = null;
+    scheduleReconnect();
+}
+
+function handleWebSocketError(error) {
+    console.error('WebSocket error:', error);
+    updateStatus('disconnected', 'Connection Error');
+}
+
+function handleWebSocketMessage(event) {
+    if (event.data instanceof ArrayBuffer) {
+        // Binary audio data
+        handleAudioData(event.data);
+        return;
+    }
+
+    try {
+        const message = JSON.parse(event.data);
+        handleStreamEvent(message);
+    } catch (error) {
+        console.error('Failed to parse message:', error, event.data);
+    }
+}
+
+function scheduleReconnect() {
+    if (reconnectTimer) return;
+    if (reconnectAttempts >= CONFIG.maxReconnectAttempts) {
+        addSystemMessage('Connection failed. Please restart the application.');
+        return;
+    }
+
+    reconnectAttempts++;
+    updateStatus('connecting', `Reconnecting (${reconnectAttempts}/${CONFIG.maxReconnectAttempts})...`);
+
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connectWebSocket();
+    }, CONFIG.reconnectDelay);
+}
+
+// Event Handling
+function handleStreamEvent(event) {
+    const { event_type, event_data, session_id, state } = event;
+
+    switch (event_type) {
+        case 'SYSTEM_SERVER_SESSION_START':
+            sessionId = session_id;
+            console.log('Session started:', sessionId);
+            addSystemMessage('Session started');
+            break;
+
+        case 'SERVER_TEXT_RESPONSE':
+            handleTextResponse(event_data);
+            break;
+
+        case 'SERVER_AUDIO_RESPONSE':
+            handleAudioResponse(event_data);
+            break;
+
+        case 'ASR_UPDATE':
+            handleASRUpdate(event_data);
+            break;
+
+        case 'SERVER_SYSTEM_MESSAGE':
+            addSystemMessage(event_data?.text || 'System message');
+            break;
+
+        case 'ERROR':
+            addErrorMessage(event_data?.text || 'An error occurred');
+            break;
+
+        default:
+            console.log('Unknown event type:', event_type, event);
+    }
+}
+
+function handleTextResponse(data) {
+    const text = data?.text || '';
+    const isFinal = data?.is_final !== false;
+
+    if (!currentBotMessage) {
+        currentBotMessage = addMessage('', 'bot');
+    }
+
+    // Append streaming text
+    if (isFinal) {
+        currentBotMessage.textContent += text;
+        currentBotMessage = null;
+    } else {
+        currentBotMessage.textContent += text;
+    }
+
+    scrollToBottom();
+}
+
+function handleAudioResponse(data) {
+    if (data?.data) {
+        // Base64 encoded audio
+        const audioBytes = base64ToArrayBuffer(data.data);
+        audioQueue.push(audioBytes);
+        playNextAudio();
+    }
+}
+
+function handleASRUpdate(data) {
+    const text = data?.text || '';
+    const isFinal = data?.is_final;
+
+    if (text) {
+        asrPreview.textContent = text;
+        asrPreview.classList.remove('hidden');
+
+        if (isFinal) {
+            // Add as user message when ASR is final
+            addMessage(text, 'user');
+            asrPreview.classList.add('hidden');
+            asrPreview.textContent = '';
+        }
+    }
+}
+
+function handleAudioData(arrayBuffer) {
+    audioQueue.push(arrayBuffer);
+    playNextAudio();
+}
+
+// Audio Playback
+async function playNextAudio() {
+    if (isPlayingAudio || audioQueue.length === 0) return;
+
+    isPlayingAudio = true;
+    const audioData = audioQueue.shift();
+
+    try {
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                sampleRate: CONFIG.audioSampleRate
+            });
+        }
+
+        // Convert PCM to AudioBuffer
+        const audioBuffer = pcmToAudioBuffer(audioData);
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+
+        source.onended = () => {
+            isPlayingAudio = false;
+            playNextAudio();
+        };
+
+        source.start();
+    } catch (error) {
+        console.error('Audio playback error:', error);
+        isPlayingAudio = false;
+        playNextAudio();
+    }
+}
+
+function pcmToAudioBuffer(arrayBuffer) {
+    const int16Array = new Int16Array(arrayBuffer);
+    const float32Array = new Float32Array(int16Array.length);
+
+    for (let i = 0; i < int16Array.length; i++) {
+        float32Array[i] = int16Array[i] / 32768.0;
+    }
+
+    const audioBuffer = audioContext.createBuffer(
+        CONFIG.audioChannels,
+        float32Array.length,
+        CONFIG.audioSampleRate
+    );
+    audioBuffer.getChannelData(0).set(float32Array);
+
+    return audioBuffer;
+}
+
+// Audio Recording
+async function startRecording() {
+    try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                sampleRate: CONFIG.audioSampleRate,
+                channelCount: CONFIG.audioChannels,
+                echoCancellation: true,
+                noiseSuppression: true,
+            }
+        });
+
+        audioContext = new (window.AudioContext || window.webkitAudioContext)({
+            sampleRate: CONFIG.audioSampleRate
+        });
+
+        const source = audioContext.createMediaStreamSource(mediaStream);
+        audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+
+        audioProcessor.onaudioprocess = (event) => {
+            if (!isRecording) return;
+
+            const inputData = event.inputBuffer.getChannelData(0);
+            const pcmData = floatTo16BitPCM(inputData);
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(pcmData);
+            }
+        };
+
+        source.connect(audioProcessor);
+        audioProcessor.connect(audioContext.destination);
+
+        isRecording = true;
+        micBtn.classList.add('recording');
+        console.log('Recording started');
+    } catch (error) {
+        console.error('Failed to start recording:', error);
+        addErrorMessage('Microphone access denied');
+    }
+}
+
+function stopRecording() {
+    isRecording = false;
+    micBtn.classList.remove('recording');
+
+    if (audioProcessor) {
+        audioProcessor.disconnect();
+        audioProcessor = null;
+    }
+
+    if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
+    }
+
+    // Send speech end event
+    sendEvent('CLIENT_SPEECH_END', {});
+
+    console.log('Recording stopped');
+}
+
+function floatTo16BitPCM(float32Array) {
+    const buffer = new ArrayBuffer(float32Array.length * 2);
+    const view = new DataView(buffer);
+
+    for (let i = 0; i < float32Array.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32Array[i]));
+        view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+
+    return buffer;
+}
+
+// Message Handling
+function sendTextMessage(text) {
+    if (!text.trim()) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        addErrorMessage('Not connected to server');
+        return;
+    }
+
+    addMessage(text, 'user');
+    sendEvent('CLIENT_TEXT_INPUT', {
+        text: text,
+        language: 'zh-CN',
+        is_final: true
+    });
+
+    messageInput.value = '';
+}
+
+function sendEvent(eventType, eventData) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+    const event = {
+        event_type: eventType,
+        event_data: eventData,
+        tag_id: generateId(),
+        session_id: sessionId,
+        timestamp: Date.now() / 1000
+    };
+
+    ws.send(JSON.stringify(event));
+}
+
+// UI Updates
+function addMessage(text, type) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `message message-${type}`;
+    msgDiv.textContent = text;
+
+    messagesArea.appendChild(msgDiv);
+    scrollToBottom();
+
+    return msgDiv;
+}
+
+function addSystemMessage(text) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'message message-system';
+    msgDiv.textContent = text;
+
+    messagesArea.appendChild(msgDiv);
+    scrollToBottom();
+}
+
+function addErrorMessage(text) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'message message-error';
+    msgDiv.textContent = text;
+
+    messagesArea.appendChild(msgDiv);
+    scrollToBottom();
+}
+
+function updateStatus(state, text) {
+    statusIndicator.className = `status-indicator ${state}`;
+    statusText.textContent = text;
+}
+
+function scrollToBottom() {
+    messagesArea.scrollTop = messagesArea.scrollHeight;
+}
+
+// Event Listeners
+function setupEventListeners() {
+    sendBtn.addEventListener('click', () => {
+        sendTextMessage(messageInput.value);
+    });
+
+    messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendTextMessage(messageInput.value);
+        }
+    });
+
+    // Push-to-talk
+    micBtn.addEventListener('mousedown', startRecording);
+    micBtn.addEventListener('mouseup', stopRecording);
+    micBtn.addEventListener('mouseleave', () => {
+        if (isRecording) stopRecording();
+    });
+
+    // Touch support for mobile
+    micBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        startRecording();
+    });
+    micBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        stopRecording();
+    });
+}
+
+// Utilities
+function generateId() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
+function base64ToArrayBuffer(base64) {
+    const binaryString = atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
+// Cleanup on unload
+window.addEventListener('beforeunload', () => {
+    if (isRecording) stopRecording();
+    if (ws) ws.close();
+});

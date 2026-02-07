@@ -1,21 +1,30 @@
 [package]
 name = "chat-bot-desktop"
 version = "0.1.0"
-description = "A Tauri App"
+description = "Chat Bot Desktop Application"
 authors = ["nako"]
 license = ""
 repository = ""
 edition = "2021"
 
+[lib]
+name = "chat_bot_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
-tauri-build = { version = "1.5", features = [] }
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "1.5", features = [ "shell-open", "shell-execute"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-process = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-single-instance = "2"
 
 [features]
-# by default Tauri runs in production mode
-# when `tauri dev` runs it is executed with `debug` feature
+default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
