@@ -7,7 +7,6 @@ from utils.module_initialization_utils import initialize_single_module_instance
 from .session_context import SessionContext
 from .session_manager import SessionManager
 
-# 导入模块工厂函数
 from adapters.asr.asr_factory import create_asr_adapter
 from adapters.llm.llm_factory import create_llm_adapter
 from adapters.tts.tts_factory import create_tts_adapter
@@ -40,14 +39,14 @@ class ChatEngine:
         self.common_modules: Dict[str, BaseModule] = {}  # ASR, LLM, TTS, VAD
         self.protocol_modules: Dict[str, BaseProtocol] = {}  # Protocols
 
+        # 会话管理器（ChatEngine 作为总负责人持有）
+        from .conversation_manager import ConversationManager
+        self.conversation_manager = ConversationManager(session_manager=session_manager)
+
         logger.info("ChatEngine 初始化完成")
 
-    async def initialize(self, conversation_manager: 'ConversationManager' = None):
-        """异步初始化 ChatEngine，加载所有模块
-
-        Args:
-            conversation_manager: ConversationManager 实例，用于协议模块初始化
-        """
+    async def initialize(self):
+        """异步初始化 ChatEngine，加载所有模块"""
         logger.info("ChatEngine 正在初始化模块...")
 
         try:
@@ -85,8 +84,12 @@ class ChatEngine:
                     factory_dict={"protocols": create_protocol_adapter},
                     base_class=BaseProtocol,
                     existing_modules=self.protocol_modules,
-                    conversation_manager=conversation_manager
+                    conversation_manager=self.conversation_manager
                 )
+
+            # 设置全局模块上下文
+            from core.app_context import AppContext
+            AppContext.set_modules(self.common_modules)
 
             logger.info("ChatEngine 模块初始化完成")
 

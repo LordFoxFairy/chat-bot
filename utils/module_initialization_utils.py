@@ -1,9 +1,54 @@
-from typing import Dict, Optional, Callable, Union, Type
+from typing import Any, Dict, Optional, Callable, Union, Type
 
 from core.exceptions import ModuleInitializationError
 from modules.base_protocol import BaseProtocol
 from modules.base_module import BaseModule
 from utils.logging_setup import logger
+
+
+def resolve_adapter_config(module_config: Dict[str, Any]) -> Dict[str, Any]:
+    """解析适配器配置，支持 enable_module 选择子配置
+
+    如果配置中包含 enable_module 字段，则从 config 子字典中选取对应的配置。
+    否则直接返回整个 config 字典。
+
+    同时将顶层配置（如 system_prompt）合并到最终配置中。
+
+    Args:
+        module_config: 模块配置字典
+
+    Returns:
+        解析后的适配器配置字典
+    """
+    base_config = module_config.get("config", {})
+    enable_module = module_config.get("enable_module")
+
+    if enable_module and isinstance(base_config, dict):
+        # 从 config 中选取 enable_module 指定的子配置
+        selected_config = base_config.get(enable_module, {})
+
+        if not selected_config:
+            logger.warning(
+                f"enable_module='{enable_module}' 指定的配置不存在于 config 中，"
+                f"可用选项: {list(base_config.keys())}"
+            )
+            selected_config = {}
+
+        # 合并顶层配置（如 system_prompt）到选中的配置中
+        top_level_keys = ["system_prompt", "max_tokens", "temperature"]
+        for key in top_level_keys:
+            if key in module_config and key not in selected_config:
+                selected_config[key] = module_config[key]
+
+        logger.debug(f"使用 enable_module='{enable_module}' 选择配置")
+        return selected_config
+
+    # 如果没有 enable_module，尝试使用 adapter_type 作为 key
+    adapter_type = module_config.get("adapter_type")
+    if adapter_type and isinstance(base_config, dict) and adapter_type in base_config:
+        return base_config.get(adapter_type, {})
+
+    return base_config
 
 
 async def initialize_single_module_instance(
@@ -47,19 +92,21 @@ async def initialize_single_module_instance(
         # 调用工厂函数创建模块实例
         adapter_type = module_config.get("adapter_type")
 
-        # 根据是否传入 conversation_manager 决定调用方式
+        # 解析适配器配置（支持 enable_module 选择子配置）
+        adapter_config = resolve_adapter_config(module_config)
+
         if conversation_manager is not None:
             module_instance: Union[BaseModule, BaseProtocol] = factory(
                 adapter_type=adapter_type,
                 module_id=module_id,
-                config=module_config,
+                config=adapter_config,
                 conversation_manager=conversation_manager
             )
         else:
             module_instance: Union[BaseModule, BaseProtocol] = factory(
                 adapter_type=adapter_type,
                 module_id=module_id,
-                config=module_config
+                config=adapter_config
             )
 
         # 验证模块实例的类型

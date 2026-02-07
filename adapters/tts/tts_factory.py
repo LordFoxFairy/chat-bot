@@ -1,50 +1,24 @@
-from typing import Dict, Type, Any
+"""TTS (文本转语音) 适配器工厂模块"""
 
-from core.exceptions import ModuleInitializationError
+from typing import Any, Dict
+
+from core.adapter_registry import AdapterRegistry, create_factory_function
 from modules.base_tts import BaseTTS
-from utils.logging_setup import logger
 
-from .edge_tts_adapter import EdgeTTSAdapter
+# 创建 TTS 适配器注册器
+tts_registry: AdapterRegistry[BaseTTS] = AdapterRegistry("TTS", BaseTTS)
 
+# 注册可用的 TTS 适配器
+tts_registry.register(
+    "edge_tts",
+    "adapters.tts.edge_tts_adapter"
+)
 
-# TTS 适配器注册表
-TTS_ADAPTERS: Dict[str, Type[BaseTTS]] = {
-    "edge_tts": EdgeTTSAdapter,
-    # 未来可以添加更多 TTS 适配器:
-    # "azure_speech": AzureSpeechAdapter,
-    # "google_tts": GoogleTTSAdapter,
+# 向后兼容：导出工厂函数
+create_tts_adapter = create_factory_function(tts_registry)
+
+# 向后兼容：导出适配器加载器字典
+TTS_ADAPTER_LOADERS = {
+    adapter_type: lambda at=adapter_type: tts_registry._loaders[at]()
+    for adapter_type in tts_registry.available_types
 }
-
-
-def create_tts_adapter(
-    adapter_type: str,
-    module_id: str,
-    config: Dict[str, Any],
-) -> BaseTTS:
-    """创建 TTS 适配器实例"""
-    adapter_class = TTS_ADAPTERS.get(adapter_type)
-
-    if adapter_class is None:
-        available_types = list(TTS_ADAPTERS.keys())
-        raise ModuleInitializationError(
-            f"不支持的 TTS 适配器类型: '{adapter_type}'. "
-            f"可用类型: {available_types}"
-        )
-
-    try:
-        logger.info(
-            f"TTS Factory: 创建 '{adapter_type}' 适配器，"
-            f"模块ID: {module_id}，类: {adapter_class.__name__}"
-        )
-
-        instance = adapter_class(
-            module_id=module_id,
-            config=config,
-        )
-
-        return instance
-
-    except Exception as e:
-        raise ModuleInitializationError(
-            f"创建 TTS 适配器 '{adapter_type}' 失败: {e}"
-        ) from e

@@ -1,6 +1,8 @@
 from typing import Any, Dict, Optional, List
 from pydantic import BaseModel, Field
 
+from core.app_context import AppContext
+
 
 class SessionContext(BaseModel):
     """会话上下文
@@ -21,8 +23,7 @@ class SessionContext(BaseModel):
     # 配置信息
     config: Dict[str, Any] = Field(default_factory=dict, description="会话配置")
 
-    # 模块管理（支持会话级隔离）
-    engine: Optional[Any] = Field(default=None, description="ChatEngine 引用")
+    # 会话自定义模块（覆盖全局模块）
     custom_modules: Dict[str, Any] = Field(default_factory=dict, description="会话自定义模块")
 
     class Config:
@@ -42,7 +43,4 @@ class SessionContext(BaseModel):
             return self.custom_modules[name]
 
         # 回退到全局模块
-        if self.engine:
-            return self.engine.get_module(name)
-
-        return None
+        return AppContext.get_module(name)

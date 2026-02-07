@@ -1,28 +1,38 @@
-from typing import Dict, Type, Any
+"""Protocol (协议) 适配器工厂模块"""
 
+from typing import TYPE_CHECKING, Any, Dict
+
+from core.adapter_registry import AdapterRegistry
 from core.exceptions import ModuleInitializationError
 from modules.base_protocol import BaseProtocol
 from utils.logging_setup import logger
 
-from .websocket_protocol_adapter import WebSocketProtocolAdapter
+if TYPE_CHECKING:
+    from core.conversation_manager import ConversationManager
 
+# 创建 Protocol 适配器注册器
+protocol_registry: AdapterRegistry[BaseProtocol] = AdapterRegistry("Protocol", BaseProtocol)
 
-# Protocol 适配器注册表
-PROTOCOL_ADAPTERS: Dict[str, Type[BaseProtocol]] = {
-    "websocket": WebSocketProtocolAdapter,
-    # 未来可以添加更多协议适配器:
-    # "http": HTTPProtocolAdapter,
-    # "grpc": GRPCProtocolAdapter,
-}
+# 注册可用的 Protocol 适配器
+protocol_registry.register(
+    "websocket",
+    "adapters.protocols.websocket_protocol_adapter"
+)
+# 未来可以添加更多协议适配器:
+# protocol_registry.register("http", "adapters.protocols.http_protocol_adapter")
+# protocol_registry.register("grpc", "adapters.protocols.grpc_protocol_adapter")
 
 
 def create_protocol_adapter(
     adapter_type: str,
     module_id: str,
     config: Dict[str, Any],
-    conversation_manager: 'ConversationManager'
+    conversation_manager: "ConversationManager"
 ) -> BaseProtocol:
     """创建 Protocol 适配器实例
+
+    Protocol 适配器需要额外的 conversation_manager 参数，
+    因此不使用通用的 create_factory_function。
 
     Args:
         adapter_type: 协议类型 (websocket, http, grpc 等)
@@ -32,31 +42,20 @@ def create_protocol_adapter(
 
     Returns:
         BaseProtocol: 协议适配器实例
+
+    Raises:
+        ModuleInitializationError: 当适配器类型不支持或创建失败时
     """
-    adapter_class = PROTOCOL_ADAPTERS.get(adapter_type)
+    return protocol_registry.create(
+        adapter_type=adapter_type,
+        module_id=module_id,
+        config=config,
+        conversation_manager=conversation_manager
+    )
 
-    if adapter_class is None:
-        available_types = list(PROTOCOL_ADAPTERS.keys())
-        raise ModuleInitializationError(
-            f"不支持的 Protocol 适配器类型: '{adapter_type}'. "
-            f"可用类型: {available_types}"
-        )
 
-    try:
-        logger.info(
-            f"Protocol Factory: 创建 '{adapter_type}' 适配器，"
-            f"模块ID: {module_id}，类: {adapter_class.__name__}"
-        )
-
-        instance = adapter_class(
-            module_id=module_id,
-            config=config,
-            conversation_manager=conversation_manager
-        )
-
-        return instance
-
-    except Exception as e:
-        raise ModuleInitializationError(
-            f"创建 Protocol 适配器 '{adapter_type}' 失败: {e}"
-        ) from e
+# 向后兼容：导出适配器加载器字典
+PROTOCOL_ADAPTER_LOADERS = {
+    adapter_type: lambda at=adapter_type: protocol_registry._loaders[at]()
+    for adapter_type in protocol_registry.available_types
+}

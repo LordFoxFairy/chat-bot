@@ -61,6 +61,10 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
         """停止协议服务"""
         raise NotImplementedError("Protocol 子类必须实现 stop 方法")
 
+    async def _setup_impl(self):
+        """初始化逻辑（默认为空，子类可覆盖）"""
+        pass
+
     # ==================== 通用协议消息处理 ====================
 
     async def handle_text_message(self, connection: ConnectionT, raw_message: str):
@@ -83,16 +87,25 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
 
     async def _handle_register(self, connection: ConnectionT, stream_event: StreamEvent):
         """处理注册消息（通用方法）"""
+        from core.session_context import SessionContext
+
         tag_id = stream_event.tag_id
 
         # 创建会话映射
         session_id = self.create_session(connection, tag_id)
 
+        # 创建 SessionContext（模块通过 AppContext 全局访问）
+        session_ctx = SessionContext(
+            session_id=session_id,
+            tag_id=tag_id
+        )
+
         # 调用 ConversationManager 创建 ConversationHandler
         await self.conversation_manager.create_conversation_handler(
             session_id=session_id,
             tag_id=tag_id,
-            send_callback=lambda event: self.send_event(session_id, event)
+            send_callback=lambda event: self.send_event(session_id, event),
+            session_context=session_ctx
         )
 
         # 发送会话确认
