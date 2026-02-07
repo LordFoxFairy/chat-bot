@@ -41,24 +41,21 @@ async def test_base_module_lifecycle():
     adapter = MockAdapter("test_module", {})
 
     # 初始状态
-    assert not adapter.is_initialized
     assert not adapter.is_ready
 
     # Setup
     await adapter.setup()
-    assert adapter.is_initialized
     assert adapter.is_ready
     assert adapter.setup_called
 
     # 重复 Setup
     adapter.setup_called = False
     await adapter.setup()
-    assert adapter.is_initialized
+    assert adapter.is_ready
     assert not adapter.setup_called  # 不应再次调用
 
     # Close
     await adapter.close()
-    assert not adapter.is_initialized
     assert not adapter.is_ready
     assert adapter.close_called
 
@@ -69,12 +66,10 @@ async def test_async_context_manager():
 
     async with adapter as module:
         assert module is adapter
-        assert adapter.is_initialized
         assert adapter.is_ready
         assert adapter.setup_called
 
     # 退出上下文后应自动关闭
-    assert not adapter.is_initialized
     assert not adapter.is_ready
     assert adapter.close_called
 
@@ -135,7 +130,6 @@ async def test_langchain_adapter_lifecycle():
     # 测试初始化
     try:
         await adapter.setup()
-        assert adapter.is_initialized
         assert adapter.is_ready
     except Exception as e:
         # 如果没有网络连接或 API Key 无效，初始化可能会失败

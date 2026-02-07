@@ -57,7 +57,8 @@ async def initialize_single_module_instance(
         factory_dict: Dict[str, Callable[..., Union[BaseModule, BaseProtocol]]],
         base_class: Union[Type[BaseModule], Type[BaseProtocol]],
         existing_modules: Dict[str, Union[BaseModule, BaseProtocol]],
-        conversation_manager: Optional['ConversationManager'] = None
+        conversation_manager: Optional['ConversationManager'] = None,
+        raise_on_error: bool = False
 ) -> Optional[Union[BaseModule, BaseProtocol]]:
     """
     通用函数，用于初始化单个模块实例。
@@ -70,12 +71,16 @@ async def initialize_single_module_instance(
         base_class (Union[Type[BaseModule], Type[BaseProtocol]]): 模块实例应继承的基类，用于类型检查。
         existing_modules (Dict[str, Union[BaseModule, BaseProtocol]]): 已加载模块的字典，用于检查重复。
         conversation_manager (Optional[ConversationManager]): ConversationManager 实例，用于协议适配器会话管理。
+        raise_on_error (bool): 是否在发生错误时抛出异常。默认为 False。
 
     Returns:
         Optional[Union[BaseModule, BaseProtocol]]: 初始化成功的模块实例，失败则返回 None。
     """
     if not isinstance(module_config, dict):
-        logger.error("模块 '%s' 的配置必须是 dict，实际为: %s", module_id, type(module_config).__name__)
+        error_msg = f"模块 '{module_id}' 的配置必须是 dict，实际为: {type(module_config).__name__}"
+        logger.error(error_msg)
+        if raise_on_error:
+            raise ValueError(error_msg)
         return None
 
     if module_id in existing_modules:
@@ -84,7 +89,10 @@ async def initialize_single_module_instance(
 
     factory = factory_dict.get(module_id)
     if not factory:
-        logger.error("未注册模块类型 '%s' 的创建工厂函数。", module_id)
+        error_msg = f"未注册模块类型 '{module_id}' 的创建工厂函数。"
+        logger.error(error_msg)
+        if raise_on_error:
+            raise ValueError(error_msg)
         return None
 
     try:
@@ -123,6 +131,10 @@ async def initialize_single_module_instance(
 
     except ModuleInitializationError as e:
         logger.error("模块 '%s' 初始化失败: %s", module_id, e)
+        if raise_on_error:
+            raise
     except Exception as e:
         logger.exception("模块 '%s' 初始化时发生异常: %s", module_id, e)
+        if raise_on_error:
+            raise
     return None

@@ -66,8 +66,8 @@ class ChatEngine:
         try:
             # 构建工厂字典
             common_factories = {
-                module_type: lambda at, mid, cfg, mt=module_type, **kw: self.adapter_loader.create(
-                    mt, at, mid, cfg, **kw
+                module_type: lambda adapter_type, module_id, config, mt=module_type, **kw: self.adapter_loader.create(
+                    mt, adapter_type, module_id, config, **kw
                 )
                 for module_type in ["asr", "llm", "tts", "vad"]
                 if self.adapter_loader.has_factory(module_type)
@@ -88,14 +88,15 @@ class ChatEngine:
                         factory_dict=common_factories,
                         base_class=BaseModule,
                         existing_modules=self.common_modules,
+                        raise_on_error=True  # 在初始化阶段，任何致命错误都应该抛出异常
                     )
 
             # 初始化协议模块
             protocol_config = module_configs.get("protocols")
             if protocol_config and self.adapter_loader.has_factory("protocol"):
                 protocol_factory = {
-                    "protocols": lambda at, mid, cfg, **kw: self.adapter_loader.create(
-                        "protocol", at, mid, cfg, **kw
+                    "protocols": lambda adapter_type, module_id, config, **kw: self.adapter_loader.create(
+                        "protocol", adapter_type, module_id, config, **kw
                     )
                 }
                 await initialize_single_module_instance(
@@ -105,6 +106,7 @@ class ChatEngine:
                     base_class=BaseProtocol,
                     existing_modules=self.protocol_modules,
                     conversation_manager=self.conversation_manager,
+                    raise_on_error=True  # 在初始化阶段，任何致命错误都应该抛出异常
                 )
 
             # 设置全局模块上下文

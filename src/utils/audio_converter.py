@@ -27,7 +27,8 @@ def convert_audio_format_torchaudio(
         audio: AudioData,
         sample_rate: int,
         channels: int,
-        output_format: str = "pcm_f32le"
+        output_format: str = "pcm_f32le",
+        raise_on_error: bool = False
 ) -> Optional[np.ndarray]:
     """使用 torchaudio 转换音频格式"""
     try:
@@ -58,6 +59,8 @@ def convert_audio_format_torchaudio(
 
     except Exception as e:
         logger.error(f"torchaudio 音频转换失败: {e}", exc_info=True)
+        if raise_on_error:
+            raise
         return None
 
 
@@ -66,7 +69,8 @@ def convert_audio_format(
         sample_rate: int,
         channels: int,
         sample_width: int,  # 通常为 2 (16-bit)
-        output_format: str = "pcm_f32le"  # ASR期望的内部格式, pcm_f32le 指 float32 little-endian
+        output_format: str = "pcm_f32le",  # ASR期望的内部格式, pcm_f32le 指 float32 little-endian
+        raise_on_error: bool = False
 ) -> Optional[np.ndarray]:
     """将音频转换为 ASR 模型需要的格式
 
@@ -76,17 +80,21 @@ def convert_audio_format(
         channels: 目标通道数 (1=单声道)
         sample_width: 目标样本宽度 (字节，2=16bit)
         output_format: 输出格式 ("pcm_f32le" 或 "pcm_s16le")
+        raise_on_error: 发生错误时是否抛出异常
 
     Returns:
-        转换后的 NumPy 数组，失败返回 None
+        转换后的 NumPy 数组，失败返回 None (除非 raise_on_error=True)
     """
     # 优先使用 torchaudio
     if TORCHAUDIO_AVAILABLE:
         logger.debug("使用 torchaudio 转换音频")
-        return convert_audio_format_torchaudio(audio, sample_rate, channels, output_format)
+        return convert_audio_format_torchaudio(audio, sample_rate, channels, output_format, raise_on_error)
 
     if not PYDUB_AVAILABLE:
-        logger.error("音频转换失败: 'pydub' 和 'torchaudio' 库都未安装。")
+        error_msg = "音频转换失败: 'pydub' 和 'torchaudio' 库都未安装。"
+        logger.error(error_msg)
+        if raise_on_error:
+            raise RuntimeError(error_msg)
         return None
 
     if not audio.data:
@@ -147,12 +155,19 @@ def convert_audio_format(
             logger.debug(f"成功将音频转换为 int16 NumPy 数组，形状: {audio_np.shape}")
             return audio_np  # 已经是 int16
         else:
-            logger.error(f"不支持的目标 ASR 格式 '{output_format}' 或与目标样本宽度不匹配。")
+            error_msg = f"不支持的目标 ASR 格式 '{output_format}' 或与目标样本宽度不匹配。"
+            logger.error(error_msg)
+            if raise_on_error:
+                raise ValueError(error_msg)
             return None
 
     except CouldntDecodeError as e:
         logger.error(f"无法解码音频数据 (格式: {audio.format.value}): {e}")
+        if raise_on_error:
+            raise
         return None
     except Exception as e:
         logger.error(f"音频转换过程中发生未知错误: {e}", exc_info=True)
+        if raise_on_error:
+            raise
         return None

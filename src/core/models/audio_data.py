@@ -32,6 +32,7 @@ class AudioData(BaseModel):
         sample_width: 采样宽度 (字节，2=16bit)
         is_final: 是否为最后一个音频块
     """
+    model_config = {"frozen": True}
 
     message_id: Optional[str] = None
     data: bytes = Field(..., min_length=1, description="原始音频数据")
@@ -55,6 +56,19 @@ class AudioData(BaseModel):
         if v not in {1, 2, 4}:
             raise ValueError("采样宽度必须是 1, 2 或 4 字节")
         return v
+
+    @property
+    def size_bytes(self) -> int:
+        """返回音频数据大小（字节）"""
+        return len(self.data)
+
+    @property
+    def duration_seconds(self) -> float:
+        """返回音频时长（秒）"""
+        bytes_per_second = self.sample_rate * self.channels * self.sample_width
+        if bytes_per_second == 0:
+            return 0.0
+        return len(self.data) / bytes_per_second
 
     def __str__(self) -> str:
         return (

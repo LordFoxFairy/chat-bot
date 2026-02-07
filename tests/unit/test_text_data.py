@@ -1,7 +1,7 @@
 """TextData 值对象单元测试"""
 
 import pytest
-from dataclasses import FrozenInstanceError
+from pydantic import ValidationError
 
 from src.core.models.text_data import TextData
 
@@ -36,6 +36,12 @@ class TestTextDataCreation:
         text_data = TextData(text="  Hello  ")
         assert text_data.text == "  Hello  "
 
+    def test_create_with_empty_text_and_final_is_allowed(self):
+        """测试 is_final=True 时允许空文本"""
+        text_data = TextData(text="", is_final=True)
+        assert text_data.text == ""
+        assert text_data.is_final is True
+
 
 class TestTextDataImmutability:
     """测试 TextData 不可变性"""
@@ -43,13 +49,13 @@ class TestTextDataImmutability:
     def test_cannot_modify_text(self):
         """测试不能修改文本"""
         text_data = TextData(text="Original")
-        with pytest.raises(FrozenInstanceError):
+        with pytest.raises(ValidationError):
             text_data.text = "Modified"
 
     def test_cannot_modify_language(self):
         """测试不能修改语言"""
         text_data = TextData(text="Hello", language="en")
-        with pytest.raises(FrozenInstanceError):
+        with pytest.raises(ValidationError):
             text_data.language = "zh-CN"
 
 
