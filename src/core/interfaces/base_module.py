@@ -5,6 +5,8 @@ from typing import Any, Dict, Optional, Type, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+from src.utils.logging_setup import logger
+
 
 # 配置模型类型变量
 ConfigT = TypeVar("ConfigT", bound=BaseModel)
@@ -48,6 +50,59 @@ class BaseModule(ABC):
     def is_ready(self) -> bool:
         """模块是否准备好处理请求"""
         return self._is_ready
+
+    @property
+    def _log_prefix(self) -> str:
+        """日志前缀，包含模块类名和 ID"""
+        return f"{self.__class__.__name__} [{self.module_id}]"
+
+    # ==================== 日志辅助方法 ====================
+
+    def log_info(self, message: str) -> None:
+        """记录 INFO 级别日志"""
+        logger.info(f"{self._log_prefix} {message}")
+
+    def log_debug(self, message: str) -> None:
+        """记录 DEBUG 级别日志"""
+        logger.debug(f"{self._log_prefix} {message}")
+
+    def log_warning(self, message: str) -> None:
+        """记录 WARNING 级别日志"""
+        logger.warning(f"{self._log_prefix} {message}")
+
+    def log_error(self, message: str, exc_info: bool = True) -> None:
+        """记录 ERROR 级别日志
+
+        Args:
+            message: 日志消息
+            exc_info: 是否包含异常堆栈信息（默认 True）
+        """
+        logger.error(f"{self._log_prefix} {message}", exc_info=exc_info)
+
+    def log_critical(self, message: str, exc_info: bool = True) -> None:
+        """记录 CRITICAL 级别日志"""
+        logger.critical(f"{self._log_prefix} {message}", exc_info=exc_info)
+
+    def session_log(
+        self,
+        level: str,
+        session_id: str,
+        message: str,
+        exc_info: bool = False
+    ) -> None:
+        """记录带会话 ID 的日志
+
+        Args:
+            level: 日志级别 (info, debug, warning, error)
+            session_id: 会话 ID
+            message: 日志消息
+            exc_info: 是否包含异常堆栈信息
+        """
+        full_message = f"{self._log_prefix} (Session: {session_id}) {message}"
+        log_func = getattr(logger, level, logger.info)
+        log_func(full_message, exc_info=exc_info)
+
+    # ==================== 配置辅助方法 ====================
 
     def get_config(self, key: str, default: Any = None) -> Any:
         """获取配置值
