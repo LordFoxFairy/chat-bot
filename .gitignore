@@ -1,9 +1,40 @@
-models
-.idea
+# ============== 模型和缓存 ==============
+models/
+/tmp/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# ============== IDE ==============
+.idea/
 *.iml
-tests
+.vscode/
+
+# ============== 音频文件 ==============
 *.pcm
 *.wav
+*.mp3
+outputs/
 
-/tmp
-**/__pycache__
+# ============== 敏感配置文件 ==============
+# 重要：所有包含真实密钥的配置文件都不应提交
+configs/*.conf
+configs/*.yaml
+!configs/*.example
+!configs/test_config.yaml
+
+# 环境变量文件
+.env
+.env.local
+.env.*.local
+
+# ============== 测试 ==============
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ============== 其他 ==============
+*.log
+*.tmp
+.DS_Store

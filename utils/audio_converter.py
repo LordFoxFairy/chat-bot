@@ -3,9 +3,61 @@ import pydub
 from utils.logging_setup import logger
 from typing import Optional
 import numpy as np
-from pydub import AudioSegment
-from pydub.exceptions import CouldntDecodeError
 from models import AudioData, AudioFormat
+
+# 尝试导入 pydub，如果失败则使用 torchaudio
+try:
+    from pydub import AudioSegment
+    from pydub.exceptions import CouldntDecodeError
+    PYDUB_AVAILABLE = True
+except ImportError:
+    PYDUB_AVAILABLE = False
+
+# 尝试导入 torchaudio 作为备选
+try:
+    import torchaudio
+    import torch
+    TORCHAUDIO_AVAILABLE = True
+except ImportError:
+    TORCHAUDIO_AVAILABLE = False
+
+
+def convert_audio_format_torchaudio(
+        audio: AudioData,
+        sample_rate: int,
+        channels: int,
+        output_format: str = "pcm_f32le"
+) -> Optional[np.ndarray]:
+    """使用 torchaudio 转换音频格式"""
+    try:
+        # 从字节加载音频
+        audio_bytes = io.BytesIO(audio.data)
+        waveform, orig_sample_rate = torchaudio.load(audio_bytes, format=audio.format.value)
+
+        # 重采样
+        if orig_sample_rate != sample_rate:
+            resampler = torchaudio.transforms.Resample(orig_sample_rate, sample_rate)
+            waveform = resampler(waveform)
+
+        # 转换通道数
+        if waveform.shape[0] != channels:
+            if channels == 1:  # 转为单声道
+                waveform = torch.mean(waveform, dim=0, keepdim=True)
+            elif channels == 2 and waveform.shape[0] == 1:  # 转为立体声
+                waveform = waveform.repeat(2, 1)
+
+        # 转换为 numpy
+        audio_np = waveform.squeeze().numpy()
+
+        if output_format == "pcm_f32le":
+            return audio_np.astype(np.float32)
+        else:
+            # 转为 int16
+            return (audio_np * 32767).astype(np.int16)
+
+    except Exception as e:
+        logger.error(f"torchaudio 音频转换失败: {e}", exc_info=True)
+        return None
 
 
 def convert_audio_format(
@@ -27,12 +79,15 @@ def convert_audio_format(
     Returns:
         转换后的 NumPy 数组，失败返回 None
     """
-    if not pydub:
-        logger.error("音频转换失败: 'pydub' 库未安装。请运行 'pip install pydub'。")
+    # 优先使用 torchaudio
+    if TORCHAUDIO_AVAILABLE:
+        logger.debug("使用 torchaudio 转换音频")
+        return convert_audio_format_torchaudio(audio, sample_rate, channels, output_format)
+
+    if not PYDUB_AVAILABLE:
+        logger.error("音频转换失败: 'pydub' 和 'torchaudio' 库都未安装。")
         return None
-    if not AudioSegment or not CouldntDecodeError:
-        logger.error("音频转换失败: 'pydub' 库组件未能正确导入。")
-        return None
+
     if not audio.data:
         logger.warning("输入的音频数据为空，无法转换。")
         return np.array([], dtype=np.float32)

@@ -1,3 +1,7 @@
+# Chat-Bot 配置文件模板
+# 复制此文件为 config.yaml 并根据实际情况修改配置
+# 重要：请勿将包含真实 API Key 的 config.yaml 提交到版本控制
+
 modules:
   asr: # 自动语音识别 (ASR) 模块
     enabled: true # 是否启用此模块
@@ -20,7 +24,7 @@ modules:
     module_category: "llm" # 模块类别
     adapter_type: "langchain" # LLM 适配器的类型，例如 "langchain", "direct_openai"
     # 需要与 `llm_factory.LLM_ADAPTER_REGISTRY` 中的键匹配
-    
+
     # 新增: enable_module 用于指定当前要激活哪个提供商的配置
     # 这个值应该是下面 'config' 块中某个提供商配置的键名 (例如 "openai" 或 "deepseek")
     enable_module: "deepseek" # 或者 "openai"，根据需要选择
@@ -40,7 +44,7 @@ modules:
       deepseek: # DeepSeek 提供商的配置
         model_name: "deepseek-chat" # DeepSeek 的模型名称
         api_key_env_var: "DEEPSEEK_API_KEY" # 存储 DeepSeek API Key 的环境变量名称
-        # api_key: "" # 请使用环境变量 DEEPSEEK_API_KEY，不要在此处硬编码密钥
+        # api_key: "sk-your-deepseek-api-key" # 或者直接填写 (不推荐，请使用环境变量)
         temperature: 0.65 # DeepSeek 的温度参数
         # system_prompt: "针对DeepSeek的特定系统提示" # 可选
 
@@ -94,4 +98,4 @@ activation_settings:
   activation_timeout_seconds: 30 # 激活后，无交互的超时时间 (秒)
   activation_reply: "你好！很高兴为您服务，请问有什么可以帮您的吗？" # 成功激活后的回复
   deactivation_reply: "再见，本次服务结束，期待下次能继续帮助您。" # 超时或明确指令导致失活时的回复
-  prompt_if_not_activated: "请输入激活指令开始对话，例如“你好小助手”。" # (可选) 当未激活时收到非激活指令的提示
+  prompt_if_not_activated: "请输入激活指令开始对话，例如"你好小助手"。" # (可选) 当未激活时收到非激活指令的提示

@@ -10,7 +10,6 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from core.chat_engine import ChatEngine
 from core.session_manager import SessionManager, InMemoryStorage
-from core.conversation_manager import ConversationManager
 
 
 async def main():
@@ -28,21 +27,15 @@ async def main():
             logger.critical(f"错误: 从 '{config_path}' 加载配置失败。")
             return
 
-        # 2. 创建 SessionManager（依赖注入）
+        # 2. 创建 SessionManager
         storage_backend = InMemoryStorage(maxsize=10000)
         session_manager = SessionManager(storage_backend=storage_backend)
 
-        # 3. 创建 ChatEngine（依赖注入 SessionManager）
+        # 3. 创建 ChatEngine（总负责人，内部创建 ConversationManager）
         chat_engine = ChatEngine(config=config, session_manager=session_manager)
 
-        # 4. 创建 ConversationManager（依赖注入 ChatEngine 和 SessionManager）
-        conversation_manager = ConversationManager(
-            chat_engine=chat_engine,
-            session_manager=session_manager
-        )
-
-        # 5. 初始化模块（传入 ConversationManager 用于 Protocol 初始化）
-        await chat_engine.initialize(conversation_manager=conversation_manager)
+        # 4. 初始化所有模块
+        await chat_engine.initialize()
 
         logger.info("[服务器] 主异步循环将运行，等待客户端连接和消息...")
 
