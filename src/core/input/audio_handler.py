@@ -3,12 +3,12 @@ import re
 import time
 import uuid
 from collections import deque
-from typing import Callable, Awaitable, Optional
+from typing import Awaitable, Callable, Optional
 
-from src.core.interfaces.base_vad import BaseVAD
 from src.core.interfaces.base_asr import BaseASR
+from src.core.interfaces.base_vad import BaseVAD
+from src.core.models import AudioData, AudioFormat, EventType, StreamEvent, TextData
 from src.core.session.session_context import SessionContext
-from src.core.models import StreamEvent, EventType, AudioData, AudioFormat, TextData
 from src.utils.logging_setup import logger
 
 
@@ -49,8 +49,8 @@ class AudioInputHandler:
         self.result_callback = result_callback
 
         # 从 session 获取模块（支持会话级隔离）
-        self.vad_module = session_context.get_module("vad")
-        self.asr_module = session_context.get_module("asr")
+        self.vad_module: Optional[BaseVAD] = session_context.get_module("vad")
+        self.asr_module: Optional[BaseASR] = session_context.get_module("asr")
 
         # 配置
         self.silence_timeout = silence_timeout
@@ -105,6 +105,10 @@ class AudioInputHandler:
         Args:
             chunk: 音频数据
         """
+        if not self.vad_module:
+            logger.warning(f"[AudioInput] VAD module not available, session={self.session_context.session_id}")
+            return
+
         # VAD 检测
         is_speech = await self.vad_module.detect(chunk)
 
@@ -230,6 +234,12 @@ class AudioInputHandler:
         """处理音频段 - ASR 识别"""
 
         if not audio_bytes:
+            if is_final:
+                await self._send_final_result()
+            return
+
+        if not self.asr_module:
+            logger.warning(f"[AudioInput] ASR module not available, session={self.session_context.session_id}")
             if is_final:
                 await self._send_final_result()
             return

@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Optional, Dict, Callable, Awaitable, Set
+from typing import Any, Awaitable, Callable, Dict, Optional, Set
 
 from src.core.models import StreamEvent, EventType, TextData
 from src.core.interfaces import BaseLLM, BaseTTS
@@ -133,8 +133,8 @@ class ConversationOrchestrator:
     async def _on_input_result(
         self,
         input_event: StreamEvent,
-        metadata: Optional[Dict]
-    ):
+        metadata: Optional[Dict[str, Any]],
+    ) -> None:
         """输入结果回调 - 处理 ASR 或文本输入的结果"""
         text_data: TextData = input_event.event_data
 
@@ -212,11 +212,10 @@ class ConversationOrchestrator:
 
         # BaseLLM 的方法是 chat_stream(text, session_id)
         async for text_chunk in llm_module.chat_stream(llm_input, self.session_id):
-            # chat_stream 返回 AsyncGenerator[TextData, None]
-            content = text_chunk.text if hasattr(text_chunk, 'text') else text_chunk
+            content = text_chunk.text
 
             # 检查打断
-            if self.interrupt_manager.check_interrupt():
+            if self.interrupt_manager.is_interrupted:
                 logger.info(f"ConversationOrchestrator 对话被打断: session={self.session_id}")
                 break
 
@@ -234,7 +233,7 @@ class ConversationOrchestrator:
 
         # 发送剩余文本
         remaining = self.sentence_splitter.get_remaining()
-        if remaining and not self.interrupt_manager.check_interrupt():
+        if remaining and not self.interrupt_manager.is_interrupted:
             self._create_background_task(
                 self._send_sentence(remaining, tts_module, is_final=True)
             )
@@ -245,11 +244,10 @@ class ConversationOrchestrator:
         llm_module: BaseLLM
     ):
         """只处理 LLM 输出（无 TTS）"""
-        # 修复: BaseLLM 的方法是 chat_stream(text, session_id)
         async for text_chunk in llm_module.chat_stream(llm_input, self.session_id):
-            content = text_chunk.text if hasattr(text_chunk, 'text') else text_chunk
+            content = text_chunk.text
 
-            if self.interrupt_manager.check_interrupt():
+            if self.interrupt_manager.is_interrupted:
                 break
 
             if content:
@@ -261,7 +259,7 @@ class ConversationOrchestrator:
                 await self.send_callback(text_event)
 
         # 发送最终标记
-        if not self.interrupt_manager.check_interrupt():
+        if not self.interrupt_manager.is_interrupted:
             final_event = StreamEvent(
                 event_type=EventType.SERVER_TEXT_RESPONSE,
                 event_data=TextData(text="", is_final=True),
@@ -290,7 +288,7 @@ class ConversationOrchestrator:
         is_final: bool = False
     ):
         """发送句子（文本 + 音频）"""
-        if self.interrupt_manager.check_interrupt():
+        if self.interrupt_manager.is_interrupted:
             return
 
         # 发送文本
@@ -304,7 +302,7 @@ class ConversationOrchestrator:
         # BaseTTS.synthesize_stream 返回 AsyncGenerator[AudioData, None]
         # 遍历音频流并发送每个音频块
         async for audio_chunk in tts_module.synthesize_stream(TextData(text=sentence)):
-            if self.interrupt_manager.check_interrupt():
+            if self.interrupt_manager.is_interrupted:
                 break
 
             if audio_chunk and audio_chunk.data:

@@ -28,10 +28,8 @@ class ChatEngine:
         self,
         config: Dict[str, Any],
         session_manager: SessionManager,
-        loop: Optional[asyncio.AbstractEventLoop] = None
     ):
         self.global_config = config
-        self.loop = loop if loop else asyncio.get_event_loop()
         self.session_manager = session_manager
 
         # 模块存储
@@ -96,6 +94,31 @@ class ChatEngine:
             logger.critical(f"ChatEngine 模块加载失败: {e}", exc_info=True)
             raise
 
-    def get_module(self, module_name: str):
+    def get_module(self, module_name: str) -> Optional[BaseModule]:
         """获取模块实例"""
         return self.common_modules.get(module_name)
+
+    async def shutdown(self) -> None:
+        """关闭引擎，释放所有资源"""
+        logger.info("ChatEngine 正在关闭...")
+
+        # 关闭所有通用模块
+        for module_id, module in self.common_modules.items():
+            try:
+                await module.close()
+                logger.debug(f"模块 {module_id} 已关闭")
+            except Exception as e:
+                logger.error(f"关闭模块 {module_id} 失败: {e}", exc_info=True)
+
+        # 关闭所有协议模块
+        for protocol_id, protocol in self.protocol_modules.items():
+            try:
+                await protocol.close()
+                logger.debug(f"协议 {protocol_id} 已关闭")
+            except Exception as e:
+                logger.error(f"关闭协议 {protocol_id} 失败: {e}", exc_info=True)
+
+        self.common_modules.clear()
+        self.protocol_modules.clear()
+
+        logger.info("ChatEngine 已关闭")

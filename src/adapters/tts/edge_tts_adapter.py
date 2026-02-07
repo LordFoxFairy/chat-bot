@@ -1,5 +1,5 @@
 import asyncio
-from typing import AsyncGenerator, Optional, Dict, Any, Type
+from typing import Any, AsyncGenerator, Dict, Type
 
 from src.core.models.exceptions import ModuleInitializationError, ModuleProcessingError
 from src.core.models import AudioData, TextData, AudioFormat

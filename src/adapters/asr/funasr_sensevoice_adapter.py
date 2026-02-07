@@ -8,7 +8,8 @@ import numpy as np
 from src.core.models.exceptions import ModuleInitializationError, ModuleProcessingError
 from src.core.models import AudioData
 from src.core.interfaces.base_asr import BaseASR
-from src.utils.logging_setup import logger; from src.utils.audio_converter import convert_audio_format
+from src.utils.audio_converter import convert_audio_format
+from src.utils.logging_setup import logger
 
 # 动态导入 FunASR
 try:
@@ -126,7 +127,6 @@ class FunASRSenseVoiceAdapter(BaseASR):
 
     def _preprocess(self, audio: AudioData) -> Optional[np.ndarray]:
         """预处理音频数据，将 AudioData 转换为模型所需的格式"""
-        from src.utils.audio_converter import convert_audio_format
         return convert_audio_format(
             audio=audio,
             sample_rate=self.sample_rate,

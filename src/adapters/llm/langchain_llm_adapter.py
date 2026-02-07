@@ -10,7 +10,7 @@
 
 import asyncio
 import os
-from typing import Any, AsyncGenerator, Dict, List, Optional, Type
+from typing import Any, AsyncGenerator, Dict, Optional, Type
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage

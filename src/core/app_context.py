@@ -18,7 +18,7 @@
 """
 
 from threading import RLock
-from typing import Any, Dict, Optional, Type, TypeVar, overload
+from typing import Any, Dict, Optional, Type, TypeVar
 
 T = TypeVar("T")
 

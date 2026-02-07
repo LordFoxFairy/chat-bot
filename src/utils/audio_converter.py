@@ -1,9 +1,10 @@
 import io
-import pydub
-from src.utils.logging_setup import logger
 from typing import Optional
+
 import numpy as np
+
 from src.core.models import AudioData, AudioFormat
+from src.utils.logging_setup import logger
 
 # 尝试导入 pydub，如果失败则使用 torchaudio
 try:

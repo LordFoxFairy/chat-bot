@@ -1,4 +1,3 @@
-from typing import Any, Dict
 from src.utils.logging_setup import logger
 
 class InterruptManager:
@@ -40,6 +39,3 @@ class InterruptManager:
         """重置历史打断记录"""
         self._was_interrupted = False
 
-    def check_interrupt(self) -> bool:
-        """检查并返回是否被打断"""
-        return self._interrupt_flag

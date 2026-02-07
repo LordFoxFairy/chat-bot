@@ -11,7 +11,7 @@ class SentenceSplitter:
 
     DEFAULT_PATTERN = r'([，。！？；、,.!?;])'
 
-    def __init__(self, delimiter_pattern: str = None):
+    def __init__(self, delimiter_pattern: Optional[str] = None):
         pattern_str = delimiter_pattern or self.DEFAULT_PATTERN
         self.delimiter_pattern: Pattern = re.compile(pattern_str)
         self.buffer = ""
