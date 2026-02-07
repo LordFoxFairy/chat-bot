@@ -36,6 +36,10 @@ class BaseVAD(BaseModule):
         """检测音频中是否包含语音"""
         raise NotImplementedError("VAD 子类必须实现 detect 方法")
 
+    async def _setup_impl(self):
+        """初始化逻辑（默认为空，子类可覆盖）"""
+        pass
+
     async def reset_state(self):
         """重置 VAD 内部状态"""
         logger.debug(f"VAD [{self.module_id}] 重置状态")

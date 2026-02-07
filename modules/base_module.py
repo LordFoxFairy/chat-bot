@@ -36,11 +36,30 @@ class BaseModule(ABC):
         """模块是否准备好处理请求"""
         return self._is_ready
 
-    @abstractmethod
     async def setup(self):
-        """初始化模块资源，子类必须实现此方法"""
-        raise NotImplementedError("子类必须实现 setup 方法")
+        """初始化模块资源（模板方法）"""
+        if self._is_initialized:
+            return
+
+        await self._setup_impl()
+        self._is_initialized = True
+        self._is_ready = True
+
+    @abstractmethod
+    async def _setup_impl(self):
+        """具体初始化逻辑（由子类实现）"""
+        pass
 
     async def close(self):
         """关闭模块，释放资源"""
         self._is_ready = False
+        self._is_initialized = False
+
+    async def __aenter__(self):
+        """异步上下文管理器入口"""
+        await self.setup()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """异步上下文管理器出口"""
+        await self.close()

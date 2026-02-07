@@ -44,6 +44,16 @@ class BaseLLM(BaseModule):
         """流式对话生成"""
         raise NotImplementedError("LLM 子类必须实现 chat_stream 方法")
 
+    @abstractmethod
+    def clear_history(self, session_id: str):
+        """清除指定会话的历史记录"""
+        pass
+
+    @abstractmethod
+    def get_history_length(self, session_id: str) -> int:
+        """获取指定会话的历史记录长度"""
+        pass
+
     async def process_text(
         self,
         text: TextData,

@@ -40,6 +40,10 @@ class BaseASR(BaseModule):
         """识别音频，返回文本"""
         raise NotImplementedError("ASR 子类必须实现 recognize 方法")
 
+    async def _setup_impl(self):
+        """初始化逻辑（默认为空，子类可覆盖）"""
+        pass
+
     async def process_audio(
         self,
         audio: AudioData,

@@ -1,6 +1,6 @@
 import asyncio
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Type
 
 import numpy as np
 import torch
@@ -36,6 +36,10 @@ class SileroVADAdapter(BaseVAD):
         self.device = self.config.get("device", self.DEFAULT_DEVICE)
         self.force_reload = self.config.get("force_reload_model", False)
 
+        # 错误处理配置
+        self.consecutive_failures = 0
+        self.max_consecutive_failures = self.config.get("max_consecutive_failures", 10)
+
         # 根据采样率确定窗口大小
         default_window = (
             self.DEFAULT_WINDOW_SIZE_16K
@@ -52,8 +56,8 @@ class SileroVADAdapter(BaseVAD):
         logger.info(f"  - sample_rate: {self.sample_rate}")
         logger.info(f"  - device: {self.device}")
 
-    async def setup(self):
-        """初始化 Silero VAD 模型"""
+    async def _setup_impl(self):
+        """初始化 Silero VAD 模型 (内部实现)"""
         logger.info(f"VAD/Silero [{self.module_id}] 正在初始化模型...")
 
         try:
@@ -86,13 +90,9 @@ class SileroVADAdapter(BaseVAD):
             self.model.to(self.device)
             self.model.eval()
 
-            self._is_initialized = True
-            self._is_ready = True
             logger.info(f"VAD/Silero [{self.module_id}] 模型初始化成功")
 
         except Exception as e:
-            self._is_initialized = False
-            self._is_ready = False
             logger.error(f"VAD/Silero [{self.module_id}] 初始化失败: {e}", exc_info=True)
             raise ModuleInitializationError(f"Silero VAD 初始化失败: {e}") from e
 
@@ -130,10 +130,22 @@ class SileroVADAdapter(BaseVAD):
                 f"is_speech={is_speech}, prob={speech_prob:.4f}, threshold={self.threshold}"
             )
 
+            # 成功执行，重置失败计数
+            self.consecutive_failures = 0
+
             return is_speech
 
         except Exception as e:
-            logger.error(f"VAD/Silero [{self.module_id}] 检测失败: {e}", exc_info=True)
+            self.consecutive_failures += 1
+            logger.error(
+                f"VAD/Silero [{self.module_id}] 检测失败 ({self.consecutive_failures}/{self.max_consecutive_failures}): {e}",
+                exc_info=True
+            )
+
+            if self.consecutive_failures >= self.max_consecutive_failures:
+                logger.critical(f"VAD/Silero [{self.module_id}] 连续失败次数过多，抛出异常")
+                raise ModuleProcessingError(f"Silero VAD 连续失败 {self.consecutive_failures} 次: {e}") from e
+
             return False
 
     async def reset_state(self):
@@ -155,8 +167,10 @@ class SileroVADAdapter(BaseVAD):
         if self.device == "cuda" and torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-        self._is_ready = False
-        self._is_initialized = False
-
         logger.info(f"VAD/Silero [{self.module_id}] 已关闭")
         await super().close()
+
+
+def load() -> Type["SileroVADAdapter"]:
+    """加载 SileroVAD 适配器类"""
+    return SileroVADAdapter

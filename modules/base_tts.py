@@ -39,6 +39,10 @@ class BaseTTS(BaseModule):
         """流式合成语音，返回音频流"""
         raise NotImplementedError("TTS 子类必须实现 synthesize_stream 方法")
 
+    async def _setup_impl(self):
+        """初始化逻辑（默认为空，子类可覆盖）"""
+        pass
+
     async def process_text(
         self,
         text: TextData,

@@ -1,4 +1,7 @@
-from typing import Optional, Dict
+from typing import Optional, Dict, Type, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.conversation_manager import ConversationManager
 
 import websockets
 from websockets.server import WebSocketServerProtocol
@@ -27,11 +30,9 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
             f"{self.host}:{self.port}"
         )
 
-    async def setup(self):
-        """初始化 WebSocket 服务器"""
+    async def _setup_impl(self):
+        """初始化 WebSocket 服务器 (内部实现)"""
         logger.info(f"Protocol/WebSocket [{self.module_id}] 正在初始化...")
-        self._is_initialized = True
-        self._is_ready = True
         logger.info(f"Protocol/WebSocket [{self.module_id}] 初始化成功")
 
     async def start(self):
@@ -57,8 +58,6 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
         logger.info(f"Protocol/WebSocket [{self.module_id}] 正在关闭...")
         await self.stop()
         self.clear_all_sessions()
-        self._is_ready = False
-        self._is_initialized = False
         logger.info(f"Protocol/WebSocket [{self.module_id}] 已关闭")
         await super().close()
 
@@ -108,3 +107,8 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
             logger.error(
                 f"Protocol/WebSocket [{self.module_id}] 发送消息失败: {e}"
             )
+
+
+def load() -> Type["WebSocketProtocolAdapter"]:
+    """加载 WebSocketProtocol 适配器类"""
+    return WebSocketProtocolAdapter

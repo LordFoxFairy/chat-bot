@@ -1,14 +1,13 @@
 import asyncio
 import os
 from functools import partial
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Type
 
 import numpy as np
 
 from core.exceptions import ModuleInitializationError, ModuleProcessingError
 from models import AudioData
 from modules.base_asr import BaseASR
-from utils.audio_converter import convert_audio_format
 from utils.logging_setup import logger
 
 # 动态导入 FunASR
@@ -55,8 +54,8 @@ class FunASRSenseVoiceAdapter(BaseASR):
         logger.info(f"  - 模型目录: {self.model_dir}")
         logger.info(f"  - 设备: {self.device}")
 
-    async def setup(self):
-        """初始化 FunASR SenseVoice 模型"""
+    async def _setup_impl(self):
+        """初始化 FunASR SenseVoice 模型 (内部实现)"""
         logger.info(f"ASR/FunASR [{self.module_id}] 正在初始化模型...")
 
         try:
@@ -92,13 +91,9 @@ class FunASRSenseVoiceAdapter(BaseASR):
             if self.model is None:
                 raise ModuleInitializationError("AutoModel 返回 None")
 
-            self._is_initialized = True
-            self._is_ready = True
             logger.info(f"ASR/FunASR [{self.module_id}] 模型初始化成功")
 
         except Exception as e:
-            self._is_initialized = False
-            self._is_ready = False
             logger.error(f"ASR/FunASR [{self.module_id}] 初始化失败: {e}", exc_info=True)
             raise ModuleInitializationError(f"FunASR 初始化失败: {e}") from e
 
@@ -131,6 +126,7 @@ class FunASRSenseVoiceAdapter(BaseASR):
 
     def _preprocess(self, audio: AudioData) -> Optional[np.ndarray]:
         """预处理音频数据，将 AudioData 转换为模型所需的格式"""
+        from utils.audio_converter import convert_audio_format
         return convert_audio_format(
             audio=audio,
             sample_rate=self.sample_rate,
@@ -154,6 +150,23 @@ class FunASRSenseVoiceAdapter(BaseASR):
 
         return result
 
+    async def close(self):
+        """释放模型资源"""
+        logger.info(f"ASR/FunASR [{self.module_id}] 正在关闭...")
+
+        if self.model is not None:
+            del self.model
+            self.model = None
+
+        # 清理可能存在的 CUDA 缓存（如果使用了 GPU）
+        if self.device == "cuda":
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        logger.info(f"ASR/FunASR [{self.module_id}] 资源已释放")
+        await super().close()
+
     def _extract_text(self, result: Any) -> str:
         """从模型输出中提取文本"""
         if not result or not isinstance(result, list):
@@ -167,3 +180,8 @@ class FunASRSenseVoiceAdapter(BaseASR):
         ]
 
         return " ".join(text_segments).strip()
+
+
+def load() -> Type["FunASRSenseVoiceAdapter"]:
+    """加载 FunASRSenseVoice 适配器类"""
+    return FunASRSenseVoiceAdapter
