@@ -72,11 +72,9 @@ class EdgeTTSAdapter(BaseTTS):
             logger.error(f"TTS/EdgeTTS [{self.module_id}] 初始化失败: {e}", exc_info=True)
             raise ModuleInitializationError(f"EdgeTTS 初始化失败: {e}") from e
 
-    async def close(self):
+    async def _close_impl(self) -> None:
         """关闭 TTS 适配器"""
-        logger.info(f"TTS/EdgeTTS [{self.module_id}] 正在关闭...")
         logger.info(f"TTS/EdgeTTS [{self.module_id}] 已关闭")
-        await super().close()
 
     async def synthesize_stream(self, text: TextData) -> AsyncGenerator[AudioData, None]:
         """流式合成语音"""

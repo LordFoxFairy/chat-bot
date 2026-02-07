@@ -150,7 +150,7 @@ class FunASRSenseVoiceAdapter(BaseASR):
 
         return result
 
-    async def close(self):
+    async def _close_impl(self) -> None:
         """释放模型资源"""
         logger.info(f"ASR/FunASR [{self.module_id}] 正在关闭...")
 
@@ -165,7 +165,6 @@ class FunASRSenseVoiceAdapter(BaseASR):
                 torch.cuda.empty_cache()
 
         logger.info(f"ASR/FunASR [{self.module_id}] 资源已释放")
-        await super().close()
 
     def _extract_text(self, result: Any) -> str:
         """从模型输出中提取文本"""

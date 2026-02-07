@@ -155,7 +155,7 @@ class SileroVADAdapter(BaseVAD):
             logger.debug(f"VAD/Silero [{self.module_id}] 模型状态已重置")
         await super().reset_state()
 
-    async def close(self):
+    async def _close_impl(self) -> None:
         """关闭模型，释放资源"""
         logger.info(f"VAD/Silero [{self.module_id}] 正在关闭...")
 
@@ -168,7 +168,6 @@ class SileroVADAdapter(BaseVAD):
             torch.cuda.empty_cache()
 
         logger.info(f"VAD/Silero [{self.module_id}] 已关闭")
-        await super().close()
 
 
 def load() -> Type["SileroVADAdapter"]:

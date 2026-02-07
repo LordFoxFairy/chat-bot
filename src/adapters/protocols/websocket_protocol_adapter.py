@@ -53,13 +53,12 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
             await self.server.wait_closed()
         logger.info(f"Protocol/WebSocket [{self.module_id}] 服务器已停止")
 
-    async def close(self):
+    async def _close_impl(self) -> None:
         """关闭协议，释放资源"""
         logger.info(f"Protocol/WebSocket [{self.module_id}] 正在关闭...")
         await self.stop()
         self.clear_all_sessions()
         logger.info(f"Protocol/WebSocket [{self.module_id}] 已关闭")
-        await super().close()
 
     # ==================== 连接管理 ====================
 

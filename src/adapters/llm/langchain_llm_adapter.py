@@ -241,11 +241,10 @@ class LangChainLLMAdapter(BaseLLM):
         """获取会话历史长度"""
         return len(self.chat_histories.get(session_id, []))
 
-    async def close(self) -> None:
+    async def _close_impl(self) -> None:
         """关闭 LLM"""
         self.chat_histories.clear()
         self.llm = None
-        await super().close()
 
 
 def load() -> Type[LangChainLLMAdapter]:
