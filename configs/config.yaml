@@ -16,33 +16,37 @@ modules:
         # output_dir: "tmp/asr_intermediate_files" # 可选: 如果适配器支持，可以指定保存中间结果的目录
 
   llm: # 大语言模型 (LLM) 模块
-    enabled: true # 是否启用此模块
-    module_category: "llm" # 模块类别
-    adapter_type: "langchain" # LLM 适配器的类型，例如 "langchain", "direct_openai"
-    # 需要与 `llm_factory.LLM_ADAPTER_REGISTRY` 中的键匹配
-    
-    # 新增: enable_module 用于指定当前要激活哪个提供商的配置
-    # 这个值应该是下面 'config' 块中某个提供商配置的键名 (例如 "openai" 或 "deepseek")
-    enable_module: "deepseek" # 或者 "openai"，根据需要选择
+    enabled: true
+    module_category: "llm"
+    adapter_type: "langchain"
 
-    system_prompt: "你是一个非常乐于助人的AI智能助手，请用友善和专业的语气回答问题。" # 全局系统提示，可被特定提供商配置覆盖
+    # 选择激活的配置 (anthropic / openrouter / openai)
+    enable_module: "anthropic"
 
-    config: # 包含所有受支持的 LLM 提供商的配置详情
-      # LangchainLLMAdapter 会根据上面的 'enable_module' 字段选择其中一个使用
-      openai: # OpenAI 提供商的配置
-        model_name: "gpt-3.5-turbo" # OpenAI 的模型名称
-        api_key_env_var: "OPENAI_API_KEY" # 存储 OpenAI API Key 的环境变量名称
-        # 运行时框架会从该环境变量读取密钥
-        # api_key: "sk-YOUR_OPENAI_KEY_HERE" # 或者直接在此处填写API Key (不推荐)
-        temperature: 0.7 # 控制生成文本的随机性，值越高越随机
-        # system_prompt: "针对OpenAI的特定系统提示" # 可选：覆盖全局 system_prompt
+    system_prompt: "你是一个非常乐于助人的AI智能助手，请用友善和专业的语气回答问题。"
 
-      deepseek: # DeepSeek 提供商的配置
-        model_name: "deepseek-chat" # DeepSeek 的模型名称
-        api_key_env_var: "DEEPSEEK_API_KEY" # 存储 DeepSeek API Key 的环境变量名称
-        # api_key: "" # 请使用环境变量 DEEPSEEK_API_KEY，不要在此处硬编码密钥
-        temperature: 0.65 # DeepSeek 的温度参数
-        # system_prompt: "针对DeepSeek的特定系统提示" # 可选
+    config:
+      # OpenRouter (推荐 - 支持多种模型)
+      openrouter:
+        model_name: "anthropic/claude-sonnet-4"  # 或其他模型如 openai/gpt-4
+        api_key_env_var: "OPENROUTER_API_KEY"
+        base_url: "https://openrouter.ai/api/v1"
+        temperature: 0.7
+        max_tokens: 4096
+
+      # Anthropic 直连
+      anthropic:
+        model_name: "claude-sonnet-4-20250514"
+        api_key_env_var: "ANTHROPIC_API_KEY"
+        temperature: 0.7
+        max_tokens: 4096
+
+      # OpenAI 直连
+      openai:
+        model_name: "gpt-4"
+        api_key_env_var: "OPENAI_API_KEY"
+        temperature: 0.7
+        max_tokens: 4096
 
   tts: # 文本轉語音 (TTS) 模塊的頂層配置
     enabled: true               # 是否啟用此 TTS 模塊
