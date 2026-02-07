@@ -2,6 +2,22 @@
 # API Keys 通过环境变量配置，请在 .env 文件中设置
 # 格式: MODEL_NAME, BASE_URL, API_KEY_ENV_VAR
 
+# ==================== LangChain Agent Example ====================
+[gpt-4-agent]
+adapter_type = "langchain_agent"  # 或 "langchain" 使用传统模式
+model_name = "gpt-4"
+api_key_env_var = "OPENAI_API_KEY"
+
+# Agent 模式配置
+agent_mode = true
+middleware = ["retry", "log_before", "log_after"]
+tools = ["search", "calculator"]
+
+# 传统配置
+temperature = 0.7
+max_tokens = 2000
+system_prompt = "You are a helpful assistant."
+
 # ==================== Anthropic Claude ====================
 [coordinator]
 model_name = claude-3-7-sonnet-20250219

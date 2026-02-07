@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Dict, Any, AsyncGenerator
+from typing import Dict, Any, AsyncGenerator, List, Optional
 
 from models import TextData
 from modules.base_module import BaseModule
@@ -30,10 +30,16 @@ class BaseLLM(BaseModule):
         self.max_tokens = self.config.get("max_tokens", 2000)
         self.system_prompt = self.config.get("system_prompt", "You are a helpful AI assistant.")
 
+        # Agent 配置
+        self.agent_mode = self.config.get("agent_mode", False)
+        self.tools = self.config.get("tools", [])
+        self.middleware = self.config.get("middleware", [])
+
         logger.debug(f"LLM [{self.module_id}] 配置加载:")
         logger.debug(f"  - model_name: {self.model_name}")
         logger.debug(f"  - temperature: {self.temperature}")
         logger.debug(f"  - max_tokens: {self.max_tokens}")
+        logger.debug(f"  - agent_mode: {self.agent_mode}")
 
     @abstractmethod
     async def chat_stream(
@@ -53,6 +59,14 @@ class BaseLLM(BaseModule):
     def get_history_length(self, session_id: str) -> int:
         """获取指定会话的历史记录长度"""
         pass
+
+    async def invoke(
+        self,
+        text: TextData,
+        session_id: str
+    ) -> TextData:
+        """非流式对话生成 (Agent模式下常用) - 可选实现"""
+        raise NotImplementedError("LLM 子类未实现 invoke 方法")
 
     async def process_text(
         self,

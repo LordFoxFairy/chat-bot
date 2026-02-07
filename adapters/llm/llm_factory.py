@@ -13,6 +13,10 @@ llm_registry.register(
     "langchain",
     "adapters.llm.langchain_llm_adapter"
 )
+llm_registry.register(
+    "langchain_agent",
+    "adapters.llm.langchain_agent_adapter"
+)
 
 # 向后兼容：导出工厂函数
 create_llm_adapter = create_factory_function(llm_registry)
