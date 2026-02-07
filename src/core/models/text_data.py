@@ -1,29 +1,33 @@
-from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field
+"""文本数据模型"""
+
+from typing import Any, Dict, Optional
+
+from pydantic import BaseModel, Field, computed_field
 
 
 class TextData(BaseModel):
+    """文本数据模型
+
+    Attributes:
+        text: 文本内容
+        language: 语言代码 (如 'zh', 'en')
+        is_final: 是否为流式文本的最后一部分
     """
-    文本数据模型。
-    """
-    text: str = Field(..., description="实际的文本内容。")
-    message_id: Optional[str] = Field(None, description="消息id")
-    chunk_id: Optional[str] = Field(None, description="消息段id")
-    language: Optional[str] = Field(None, description="语言代码 (例如 'en', 'zh-CN')。")
-    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="任何附加的元数据。")
-    is_final: bool = Field(False, description="是否是流式文本的最后一部分 (流式场景默认 False)")
+
+    text: str = Field(..., max_length=100000, description="文本内容")
+    message_id: Optional[str] = None
+    chunk_id: Optional[str] = None
+    language: Optional[str] = Field(None, pattern=r"^[a-z]{2}(-[A-Z]{2})?$")
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    is_final: bool = Field(False, description="是否为最后一部分")
+
+    @computed_field
+    @property
+    def display_text(self) -> str:
+        """截断后的显示文本"""
+        if len(self.text) > 50:
+            return self.text[:50] + "..."
+        return self.text
 
     def __str__(self) -> str:
-        """
-        返回 TextData 对象的字符串表示形式。
-        """
-        # 确保文本在打印时不会过长，同时处理 None 的情况
-        display_text = self.text
-        if display_text is not None and len(display_text) > 50:
-            display_text = display_text[:50] + "..."
-        elif display_text is None:
-            display_text = "None"
-
-        return (f"TextData(文本='{display_text}', "
-                f"语言={self.language}, "
-                f"是否最终={self.is_final})")
+        return f"TextData(text='{self.display_text}', lang={self.language}, final={self.is_final})"
