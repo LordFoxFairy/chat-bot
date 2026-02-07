@@ -1,7 +1,13 @@
 """模块基类定义"""
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Type, TypeVar
+
+from pydantic import BaseModel, ValidationError
+
+
+# 配置模型类型变量
+ConfigT = TypeVar("ConfigT", bound=BaseModel)
 
 
 class BaseModule(ABC):
@@ -13,12 +19,19 @@ class BaseModule(ABC):
     - 生命周期管理 (setup/close)
     - 状态管理 (is_ready)
     - 配置访问辅助
+    - 配置验证支持
 
     生命周期:
         1. __init__: 读取配置，初始化变量
         2. setup(): 异步初始化资源（调用 _setup_impl）
         3. is_ready = True: 可以处理请求
         4. close(): 释放资源（调用 _close_impl）
+
+    配置验证:
+        子类可以通过 validate_config() 方法使用 Pydantic 模型验证配置：
+
+        validated = self.validate_config(MyConfigModel)
+        # validated 是经过验证的 Pydantic 模型实例
     """
 
     def __init__(
@@ -64,6 +77,35 @@ class BaseModule(ABC):
         if value is None:
             raise ValueError(f"缺少必需的配置项: {key}")
         return value
+
+    def validate_config(self, config_model: Type[ConfigT]) -> ConfigT:
+        """使用 Pydantic 模型验证配置
+
+        Args:
+            config_model: Pydantic 配置模型类
+
+        Returns:
+            验证后的配置模型实例
+
+        Raises:
+            ValueError: 配置验证失败
+
+        Example:
+            from src.core.config_models import LLMModuleConfig
+
+            class MyLLMAdapter(BaseLLM):
+                def __init__(self, module_id, config):
+                    super().__init__(module_id, config)
+                    validated = self.validate_config(LLMModuleConfig)
+                    self.model_name = validated.model_name
+                    self.temperature = validated.temperature
+        """
+        try:
+            return config_model.model_validate(self.config)
+        except ValidationError as e:
+            raise ValueError(
+                f"模块 {self.module_id} 配置验证失败: {e}"
+            ) from e
 
     async def setup(self) -> None:
         """初始化模块资源（模板方法）"""

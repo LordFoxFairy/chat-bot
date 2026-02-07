@@ -1,6 +1,13 @@
-from typing import Dict, Any, Optional, Literal
+"""配置模型定义
+
+提供 Pydantic 配置模型，用于配置验证和类型安全。
+"""
+
+from typing import Dict, Any, Optional, Literal, List
 from pydantic import BaseModel, Field, field_validator, ConfigDict
-import logging
+
+
+# ==================== 日志配置 ====================
 
 class LoggingConfig(BaseModel):
     """日志配置模型"""
@@ -26,6 +33,8 @@ class LoggingConfig(BaseModel):
             raise ValueError(f"Invalid log level: {v}. Must be one of {levels}")
         return v.upper()
 
+# ==================== 适配器配置基类 ====================
+
 class BaseAdapterConfig(BaseModel):
     """适配器配置基类"""
     adapter_type: str = Field(..., description="适配器类型")
@@ -33,21 +42,74 @@ class BaseAdapterConfig(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
+
+# ==================== 模块特定配置 ====================
+
+class ASRModuleConfig(BaseModel):
+    """ASR 模块通用配置"""
+    sample_rate: int = Field(default=16000, ge=8000, le=48000, description="采样率")
+    channels: int = Field(default=1, ge=1, le=2, description="声道数")
+
+    model_config = ConfigDict(extra="allow")
+
+
+class TTSModuleConfig(BaseModel):
+    """TTS 模块通用配置"""
+    sample_rate: int = Field(default=16000, ge=8000, le=48000, description="采样率")
+    voice: str = Field(default="zh-CN-XiaoxiaoNeural", description="语音名称")
+    rate: str = Field(default="+0%", description="语速")
+    volume: str = Field(default="+0%", description="音量")
+
+    model_config = ConfigDict(extra="allow")
+
+
+class VADModuleConfig(BaseModel):
+    """VAD 模块通用配置"""
+    threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="语音检测阈值")
+    sample_rate: int = Field(default=16000, ge=8000, le=48000, description="采样率")
+
+    model_config = ConfigDict(extra="allow")
+
+
+class LLMModuleConfig(BaseModel):
+    """LLM 模块通用配置"""
+    model_name: str = Field(default="gpt-3.5-turbo", description="模型名称")
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="温度参数")
+    max_tokens: int = Field(default=2000, ge=1, description="最大生成令牌数")
+    system_prompt: str = Field(default="You are a helpful AI assistant.", description="系统提示词")
+
+    model_config = ConfigDict(extra="allow")
+
+
+class ProtocolModuleConfig(BaseModel):
+    """协议模块通用配置"""
+    host: str = Field(default="0.0.0.0", description="监听地址")
+    port: int = Field(default=8765, ge=1, le=65535, description="监听端口")
+
+    model_config = ConfigDict(extra="allow")
+
+
+# ==================== 适配器配置包装 ====================
+
 class ASRConfig(BaseAdapterConfig):
     """语音识别 (ASR) 配置"""
     pass
+
 
 class TTSConfig(BaseAdapterConfig):
     """语音合成 (TTS) 配置"""
     pass
 
+
 class VADConfig(BaseAdapterConfig):
     """语音活动检测 (VAD) 配置"""
     pass
 
+
 class LLMConfig(BaseAdapterConfig):
     """大语言模型 (LLM) 配置"""
     pass
+
 
 class ProtocolConfig(BaseAdapterConfig):
     """协议配置"""
