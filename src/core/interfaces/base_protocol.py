@@ -1,6 +1,6 @@
 import uuid
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, Generic, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Dict, Generic, Optional, TypeVar
 
 from src.core.interfaces.base_module import BaseModule
 from src.core.models import StreamEvent, EventType, TextData
@@ -9,6 +9,9 @@ from src.utils.logging_setup import logger
 
 # 泛型：连接类型
 ConnectionT = TypeVar('ConnectionT')
+
+# 模块提供者类型
+ModuleProvider = Callable[[str], Optional[Any]]
 
 
 class BaseProtocol(BaseModule, Generic[ConnectionT]):
@@ -65,6 +68,17 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
         """初始化逻辑（默认为空，子类可覆盖）"""
         pass
 
+    def _get_module_provider(self) -> ModuleProvider:
+        """获取模块提供者
+
+        默认使用 AppContext，子类可覆盖以支持依赖注入。
+
+        Returns:
+            模块提供者函数
+        """
+        from src.core.app_context import AppContext
+        return AppContext.get_module
+
     # ==================== 通用协议消息处理 ====================
 
     async def handle_text_message(self, connection: ConnectionT, raw_message: str):
@@ -94,11 +108,13 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
         # 创建会话映射
         session_id = self.create_session(connection, tag_id)
 
-        # 创建 SessionContext（模块通过 AppContext 全局访问）
+        # 创建 SessionContext（模块通过依赖注入访问）
         session_ctx = SessionContext(
             session_id=session_id,
             tag_id=tag_id
         )
+        # 注入模块提供者
+        session_ctx.set_module_provider(self._get_module_provider())
 
         # 调用 ConversationManager 创建 ConversationHandler
         await self.conversation_manager.create_conversation_handler(

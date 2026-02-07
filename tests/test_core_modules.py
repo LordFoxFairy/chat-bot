@@ -67,10 +67,11 @@ def test_session_context():
     assert ctx.config == {}
     logger.info("✓ SessionContext 创建成功")
 
-    # 测试从 AppContext 获取模块
+    # 测试通过模块提供者获取模块
     AppContext.set_modules({"llm": "global_llm"})
+    ctx.set_module_provider(AppContext.get_module)
     assert ctx.get_module("llm") == "global_llm"
-    logger.info("✓ SessionContext 从 AppContext 获取模块成功")
+    logger.info("✓ SessionContext 通过模块提供者获取模块成功")
 
     # 测试自定义模块覆盖
     ctx2 = SessionContext(
@@ -78,6 +79,7 @@ def test_session_context():
         tag_id="user_2",
         custom_modules={"llm": "custom_llm"}
     )
+    ctx2.set_module_provider(AppContext.get_module)
     assert ctx2.get_module("llm") == "custom_llm"
     logger.info("✓ SessionContext 自定义模块覆盖工作正常")
 

@@ -28,8 +28,8 @@ class TestSessionContext:
         assert ctx.config == {}
         assert ctx.custom_modules == {}
 
-    def test_get_module_from_app_context(self):
-        """测试从 AppContext 获取模块"""
+    def test_get_module_from_module_provider(self):
+        """测试从模块提供者获取模块"""
         # 设置全局模块
         AppContext.set_modules({
             "llm": "global_llm",
@@ -40,13 +40,15 @@ class TestSessionContext:
             session_id="test_session",
             tag_id="test_tag"
         )
+        # 注入模块提供者
+        ctx.set_module_provider(AppContext.get_module)
 
-        # 应该从 AppContext 获取
+        # 应该从模块提供者获取
         assert ctx.get_module("llm") == "global_llm"
         assert ctx.get_module("tts") == "global_tts"
 
     def test_custom_module_override(self):
-        """测试自定义模块覆盖全局模块"""
+        """测试自定义模块覆盖模块提供者"""
         # 设置全局模块
         AppContext.set_modules({"llm": "global_llm"})
 
@@ -56,8 +58,10 @@ class TestSessionContext:
             tag_id="test_tag",
             custom_modules={"llm": "custom_llm"}
         )
+        # 注入模块提供者
+        ctx.set_module_provider(AppContext.get_module)
 
-        # 应该返回自定义模块
+        # 应该返回自定义模块（优先于提供者）
         assert ctx.get_module("llm") == "custom_llm"
 
     def test_get_nonexistent_module(self):

@@ -1,7 +1,9 @@
-from typing import Any, Dict, Optional, List
-from pydantic import BaseModel, Field
+from typing import Any, Callable, Dict, Optional, List
+from pydantic import BaseModel, ConfigDict, Field
 
-from src.core.app_context import AppContext
+
+# 模块提供者类型：一个返回模块实例的函数
+ModuleProvider = Callable[[str], Optional[Any]]
 
 
 class SessionContext(BaseModel):
@@ -11,7 +13,11 @@ class SessionContext(BaseModel):
     - 存储会话基本信息
     - 支持会话级模块隔离（可覆盖全局模块）
     - 提供统一的模块访问接口
+
+    模块访问通过依赖注入的 module_provider 实现，不再依赖全局状态。
     """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     # 基本信息
     session_id: str = Field(description="会话ID")
@@ -26,8 +32,16 @@ class SessionContext(BaseModel):
     # 会话自定义模块（覆盖全局模块）
     custom_modules: Dict[str, Any] = Field(default_factory=dict, description="会话自定义模块")
 
-    class Config:
-        arbitrary_types_allowed = True
+    # 模块提供者（通过依赖注入）
+    _module_provider: Optional[ModuleProvider] = None
+
+    def set_module_provider(self, provider: ModuleProvider) -> None:
+        """设置模块提供者
+
+        Args:
+            provider: 模块提供者函数，接收模块名称返回模块实例
+        """
+        self._module_provider = provider
 
     def get_module(self, name: str) -> Optional[Any]:
         """获取模块（先找自定义，再找全局）
@@ -42,5 +56,8 @@ class SessionContext(BaseModel):
         if name in self.custom_modules:
             return self.custom_modules[name]
 
-        # 回退到全局模块
-        return AppContext.get_module(name)
+        # 使用模块提供者
+        if self._module_provider:
+            return self._module_provider(name)
+
+        return None
