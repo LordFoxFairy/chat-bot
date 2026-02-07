@@ -20,31 +20,20 @@ modules:
     module_category: "llm"
     adapter_type: "langchain"
 
-    # 选择激活的配置 (anthropic / openrouter / openai)
-    enable_module: "anthropic"
+    # 选择激活的配置
+    enable_module: "default"
 
     system_prompt: "你是一个非常乐于助人的AI智能助手，请用友善和专业的语气回答问题。"
 
     config:
-      # OpenRouter (推荐 - 支持多种模型)
-      openrouter:
-        model_name: "anthropic/claude-sonnet-4"  # 或其他模型如 openai/gpt-4
-        api_key_env_var: "OPENROUTER_API_KEY"
-        base_url: "https://openrouter.ai/api/v1"
-        temperature: 0.7
-        max_tokens: 4096
-
-      # Anthropic 直连
-      anthropic:
-        model_name: "claude-sonnet-4-20250514"
-        api_key_env_var: "ANTHROPIC_API_KEY"
-        temperature: 0.7
-        max_tokens: 4096
-
-      # OpenAI 直连
-      openai:
-        model_name: "gpt-4"
-        api_key_env_var: "OPENAI_API_KEY"
+      # 默认配置 - 使用统一的 API_KEY 环境变量
+      # init_chat_model 会根据 model_name 自动选择正确的客户端
+      default:
+        model_name: "claude-sonnet-4-20250514"  # 自动检测为 Anthropic
+        # model_name: "gpt-4"                   # 自动检测为 OpenAI
+        # model_name: "anthropic/claude-3-opus" # 带 base_url 使用 OpenAI 兼容
+        api_key_env_var: "API_KEY"              # 统一使用 API_KEY 环境变量
+        # base_url: "https://openrouter.ai/api/v1"  # 可选，用于自定义端点
         temperature: 0.7
         max_tokens: 4096
 
