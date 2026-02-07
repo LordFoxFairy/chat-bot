@@ -3,13 +3,13 @@ import asyncio
 import os
 import sys
 
-from utils.config_loader import ConfigLoader
-from utils.logging_setup import logger
+from src.utils.config_loader import ConfigLoader
+from src.utils.logging_setup import logger
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from core.chat_engine import ChatEngine
-from core.session_manager import SessionManager, InMemoryStorage
+from src.core.engine.chat_engine import ChatEngine
+from src.core.session.session_manager import SessionManager, InMemoryStorage
 
 
 async def main():

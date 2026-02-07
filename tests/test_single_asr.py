@@ -1,5 +1,6 @@
 import asyncio
-from utils.logging_setup import logger
+import logging
+from src.utils.logging_setup import logger
 import os
 import sys
 import time
@@ -17,11 +18,11 @@ if PROJECT_ROOT not in sys.path:
 logger.info(f"項目根目錄 '{PROJECT_ROOT}' 已添加到sys.path。")
 
 # --- 核心框架组件导入 ---
-from models import AudioData, TextData, AudioFormat
-from utils.config_loader import ConfigLoader
-from modules.base_asr import BaseASR  # 用於類型提示
+from src.core.models import AudioData, TextData, AudioFormat
+from src.utils.config_loader import ConfigLoader
+from src.core.interfaces.base_asr import BaseASR  # 用於類型提示
 # 直接導入要測試的適配器
-from adapters.asr.funasr_sensevoice_adapter import FunASRSenseVoiceAdapter
+from src.adapters.asr.funasr_sensevoice_adapter import FunASRSenseVoiceAdapter
 
 
 async def simulate_audio_bytes_stream(duration_s: float = 2.0, sample_rate: int = 16000, channels: int = 1,

@@ -21,7 +21,7 @@ outputs/
 configs/*.conf
 configs/*.yaml
 !configs/*.example
-!configs/test_config.yaml
+!src/configs/test_config.yaml
 
 # 环境变量文件
 .env
@@ -29,14 +29,20 @@ configs/*.yaml
 .env.*.local
 
 # ============== 测试 ==============
-tests/
+src/tests/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# ============== Desktop/Tauri ==============
+desktop/node_modules/
+desktop/dist/
+desktop/src-tauri/target/
 
 # ============== 其他 ==============
 *.log
 *.tmp
 .DS_Store
 
-docs
+artifacts/
+artifacts/**
