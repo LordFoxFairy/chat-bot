@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Type, TYPE_CHECKING
+from typing import Any, Dict, Optional, Type, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from src.core.session.conversation_manager import ConversationManager
@@ -20,7 +20,7 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
     - 纯传输层实现
     """
 
-    def __init__(self, module_id: str, config: Dict, conversation_manager: 'ConversationManager'):
+    def __init__(self, module_id: str, config: Dict[str, Any], conversation_manager: 'ConversationManager'):
         super().__init__(module_id, config, conversation_manager)
 
         self.server: Optional[websockets.WebSocketServer] = None
@@ -66,8 +66,8 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
     async def _handle_client(
         self,
         websocket: WebSocketServerProtocol,
-        path: Optional[str] = ""
-    ):
+        path: str = "",
+    ) -> None:
         """处理客户端连接 - 调用基类通用方法"""
         try:
             # 接收消息循环
@@ -81,7 +81,8 @@ class WebSocketProtocolAdapter(BaseProtocol[WebSocketServerProtocol]):
 
         except Exception as e:
             logger.error(
-                f"Protocol/WebSocket [{self.module_id}] 连接错误: {e}"
+                f"Protocol/WebSocket [{self.module_id}] 连接错误: {e}",
+                exc_info=True,
             )
 
         finally:

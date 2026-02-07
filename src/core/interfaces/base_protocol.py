@@ -1,6 +1,6 @@
-from abc import abstractmethod
-from typing import Dict, Any, Optional, TypeVar, Generic
 import uuid
+from abc import abstractmethod
+from typing import TYPE_CHECKING, Any, Dict, Generic, Optional, TypeVar
 
 from src.core.interfaces.base_module import BaseModule
 from src.core.models import StreamEvent, EventType, TextData
@@ -83,7 +83,7 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
                 await self._route_message(connection, stream_event)
 
         except Exception as e:
-            logger.error(f"Protocol [{self.module_id}] 消息处理失败: {e}")
+            logger.error(f"Protocol [{self.module_id}] 消息处理失败: {e}", exc_info=True)
 
     async def _handle_register(self, connection: ConnectionT, stream_event: StreamEvent):
         """处理注册消息（通用方法）"""
