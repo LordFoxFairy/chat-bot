@@ -69,6 +69,7 @@ class AudioInputHandler:
         # 任务管理
         self.monitor_task: Optional[asyncio.Task] = None
         self.client_speech_ended = asyncio.Event()
+        self._pending_tasks: set[asyncio.Task] = set()
 
     def start(self) -> None:
         """启动音频处理"""
@@ -78,6 +79,16 @@ class AudioInputHandler:
 
     async def stop(self) -> None:
         """停止音频处理"""
+        # 取消所有待处理任务
+        for task in list(self._pending_tasks):
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        self._pending_tasks.clear()
+
+        # 取消监控任务
         if self.monitor_task:
             self.monitor_task.cancel()
             try:
@@ -85,7 +96,8 @@ class AudioInputHandler:
             except asyncio.CancelledError:
                 pass
             self.monitor_task = None
-            logger.info(f"[AudioInput] Stopped for session {self.session_context.session_id}")
+
+        logger.info(f"[AudioInput] Stopped for session {self.session_context.session_id}")
 
     async def process_chunk(self, chunk: bytes) -> None:
         """处理音频块
@@ -122,18 +134,30 @@ class AudioInputHandler:
         """监控循环 - 定期检查是否应该触发 ASR"""
         try:
             while True:
-                # 等待检查间隔或客户端结束信号
-                done, pending = await asyncio.wait(
-                    [
-                        asyncio.create_task(asyncio.sleep(self.DEFAULT_CHECK_INTERVAL)),
-                        asyncio.create_task(self.client_speech_ended.wait())
-                    ],
-                    return_when=asyncio.FIRST_COMPLETED
-                )
+                # 创建任务并跟踪
+                sleep_task = asyncio.create_task(asyncio.sleep(self.DEFAULT_CHECK_INTERVAL))
+                wait_task = asyncio.create_task(self.client_speech_ended.wait())
+                self._pending_tasks.add(sleep_task)
+                self._pending_tasks.add(wait_task)
 
-                # 取消未完成的任务
-                for task in pending:
-                    task.cancel()
+                try:
+                    # 等待检查间隔或客户端结束信号
+                    done, pending = await asyncio.wait(
+                        [sleep_task, wait_task],
+                        return_when=asyncio.FIRST_COMPLETED
+                    )
+
+                    # 取消未完成的任务
+                    for task in pending:
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+                finally:
+                    # 清理任务跟踪
+                    self._pending_tasks.discard(sleep_task)
+                    self._pending_tasks.discard(wait_task)
 
                 # 检查是否应该处理
                 client_ended = self.client_speech_ended.is_set()
