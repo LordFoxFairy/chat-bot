@@ -38,3 +38,5 @@ htmlcov/
 *.log
 *.tmp
 .DS_Store
+
+docs
