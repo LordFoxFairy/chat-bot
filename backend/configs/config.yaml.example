@@ -10,7 +10,7 @@ modules:
     adapter_type: "funasr_sensevoice"
     config: # 此模块的特定配置
       funasr_sensevoice:
-        model_dir: ".cache/models/asr/SenseVoiceSmall" # ASR 模型文件所在的目录路径
+        model_dir: ".cache/models/asr/SenseVoiceSmall/iic/SenseVoiceSmall" # ASR 模型文件所在的目录路径
         # 请确保此路径相对于项目根目录是正确的
         device: "cpu" # 指定运行模型的设备 ("cpu" 或 "cuda" 如果GPU可用且已配置)
         sample_rate: 16000 # ASR 期望的输入音频采样率 (例如 16000 Hz)
