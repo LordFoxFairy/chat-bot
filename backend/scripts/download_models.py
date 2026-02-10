@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
 """下载所需的 AI 模型文件到 .cache/models 目录"""
 import os
-import sys
 from pathlib import Path
 
-# 添加项目根目录到路径
+# 计算项目根目录: backend/scripts -> backend -> project_root
 SCRIPT_DIR = Path(__file__).parent
-PROJECT_ROOT = SCRIPT_DIR.parent.parent  # backend/scripts -> backend -> project_root
-
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+PROJECT_ROOT = SCRIPT_DIR.parent.parent
 
 
 def get_cache_dir() -> Path:

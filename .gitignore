@@ -127,6 +127,7 @@ backend/configs/*.yml
 backend/configs/*.conf
 backend/configs/*.json
 !backend/configs/*.example
+!backend/configs/test_config.yaml
 
 # 密钥和证书
 *.pem

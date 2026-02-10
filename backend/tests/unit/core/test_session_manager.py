@@ -78,7 +78,7 @@ class TestSessionManager:
         result = await manager.get_session("nonexistent")
         assert result is None
 
-    def test_close(self):
+    async def test_close(self):
         """测试关闭存储"""
         storage = InMemoryStorage()
         manager = SessionManager(storage_backend=storage)

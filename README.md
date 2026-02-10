@@ -58,22 +58,37 @@
 
 ```
 chat-bot/
-│
-├── applications/         # 客户端应用 (如 web_client.html)
-├── adapters/             # 适配器层，将具体实现封装成标准模块
-│   ├── asr/
-│   ├── llm/
-│   ├── tts/
-│   └── vad/
-├── configs/              # 配置文件 (config.yaml)
-├── core/                 # 核心引擎、会话管理和模块初始化
-├── data_models/          # Pydantic数据模型 (如 StreamEvent)
-├── models/               # 本地AI模型文件 (如 VAD, ASR 模型)
-├── modules/              # 各个功能模块的基础抽象类 (base_asr.py 等)
-├── service/              # 核心服务 (如 AudioConsumer.py)
-├── utils/                # 工具函数和日志设置
-├── app.py                # 主启动文件
-└── requirements.txt      # Python依赖
+├── backend/                    # Python 后端
+│   ├── adapters/               # 适配器层（ASR, LLM, TTS, VAD, Protocols）
+│   │   ├── asr/                # 语音识别适配器 (FunASR SenseVoice)
+│   │   ├── llm/                # 大语言模型适配器 (LangChain)
+│   │   ├── tts/                # 语音合成适配器 (Edge TTS)
+│   │   ├── vad/                # 语音活动检测适配器 (Silero VAD)
+│   │   └── protocols/          # 通信协议适配器 (WebSocket)
+│   ├── configs/                # 配置文件
+│   │   ├── config.yaml         # 主配置文件（不提交到 git）
+│   │   └── config.yaml.example # 配置模板
+│   ├── core/                   # 核心框架
+│   │   ├── engine/             # ChatEngine 主引擎
+│   │   ├── interfaces/         # 基类接口定义
+│   │   ├── models/             # 数据模型 (Pydantic)
+│   │   └── session/            # 会话管理
+│   ├── scripts/                # 工具脚本
+│   │   └── download_models.py  # 模型下载工具
+│   ├── tests/                  # 测试代码
+│   │   ├── unit/               # 单元测试
+│   │   └── integration/        # 集成测试
+│   ├── utils/                  # 工具函数
+│   └── main.py                 # 统一入口
+├── frontend/                   # Tauri 桌面应用
+│   ├── src/                    # Vue/React 前端代码
+│   └── src-tauri/              # Tauri 后端代码
+├── .cache/                     # 模型缓存（自动创建，不提交到 git）
+│   └── models/
+│       ├── asr/                # ASR 模型 (SenseVoice)
+│       └── vad/                # VAD 模型 (Silero)
+├── pyproject.toml              # Python 项目配置
+└── README.md
 ```
 
 ## 🚀 快速开始
@@ -99,14 +114,24 @@ pip install -r requirements.txt
 
 ### 3. 模型文件
 
-- **VAD**: 本项目使用的 `silero-vad` 模型通常会在首次运行时由代码自动下载。
-- **ASR**: 本项目使用的 `SenseVoice` 模型文件已包含在 `models/asr/SenseVoiceSmall/` 目录中。
+模型会自动下载到 `.cache/models/` 目录：
 
-请确保 `models` 目录及其内容已正确放置在项目中。
+```bash
+# 手动下载模型（可选）
+uv run python backend/scripts/download_models.py
+```
+
+- **VAD**: Silero VAD 模型会在首次运行时自动通过 torch.hub 下载
+- **ASR**: SenseVoice 模型会下载到 `.cache/models/asr/SenseVoiceSmall/`
 
 ### 4. 配置
 
-项目的主要配置位于 `configs/config.yaml` 文件中。你可以在此文件中修改：
+1. 复制配置模板：
+```bash
+cp backend/configs/config.yaml.example backend/configs/config.yaml
+```
+
+2. 编辑 `backend/configs/config.yaml` 文件，配置：
 
 - WebSocket服务器的地址和端口。
 - 选择要使用的VAD, ASR, LLM, TTS模块实现。
@@ -140,21 +165,29 @@ modules:
 
 ### 5. 启动服务
 
-运行主程序来启动WebSocket服务器：
+```bash
+# 使用 uv 运行（推荐）
+uv run chatbot server
 
-```
-python app.py
+# 或者直接运行
+uv run python -m backend.main server
 ```
 
 服务器成功启动后，你会看到类似以下的输出：
 
 ```
-[服务器] WebSocket 服务器已在 ws://0.0.0.0:8000 启动。
+[Server] Ready and waiting for client connections...
 ```
 
-### 6. 运行客户端
+### 6. 运行桌面应用
 
-在你的网页浏览器中，直接打开 `applications/web_client.html` 文件。
+```bash
+# 启动 Tauri 桌面应用（开发模式）
+uv run chatbot desktop
+
+# 或者同时启动后端和前端
+uv run chatbot dev
+```
 
 - **连接**: 页面加载后，确认WebSocket URL正确，然后点击“连接”按钮。
 - **对话**: 连接成功后，点击“开始录音”按钮（麦克风图标），然后开始说话。
@@ -175,9 +208,33 @@ python app.py
 
 本项目的模块化设计使得扩展变得简单。例如，要添加一个新的TTS服务（如Google TTS）：
 
-1. **创建新适配器**: 在 `adapters/tts/` 目录下，创建一个新文件 `google_tts_adapter.py`。
-2. **实现基类**: 在该文件中，创建一个类（如 `GoogleTTSAdapter`），继承自 `modules.base_tts.BaseTTS`，并实现其抽象方法 `text_to_speech_block`。
-3. **注册到工厂**: 打开 `adapters/tts/tts_factory.py`，导入你的新适配器类，并在 `tts_adapters` 字典中添加一个新的条目，例如：`"google_tts_adapter": GoogleTTSAdapter`。
-4. **修改配置**: 在 `configs/config.yaml` 文件中，将 `tts` 模块的 `adapter` 字段值修改为 `"google_tts_adapter"`。
+1. **创建新适配器**: 在 `backend/adapters/tts/` 目录下，创建一个新文件 `google_tts_adapter.py`。
+2. **实现基类**: 在该文件中，创建一个类（如 `GoogleTTSAdapter`），继承自 `backend.core.interfaces.base_tts.BaseTTS`，并实现其抽象方法 `synthesize_stream`。
+3. **添加 load() 函数**: 在适配器文件末尾添加 `def load(): return GoogleTTSAdapter`。
+4. **注册到工厂**: 打开 `backend/adapters/tts/tts_factory.py`，注册新适配器：
+   ```python
+   tts_registry.register("google_tts", "backend.adapters.tts.google_tts_adapter")
+   ```
+5. **修改配置**: 在 `backend/configs/config.yaml` 文件中，将 `tts` 模块的 `adapter_type` 字段值修改为 `"google_tts"`。
 
 重启服务后，系统将自动加载并使用你的新TTS模块。对VAD, ASR, LLM的扩展也遵循同样的模式。
+
+## 🧪 测试
+
+```bash
+# 运行所有测试
+uv run pytest backend/tests/
+
+# 运行单元测试
+uv run pytest backend/tests/unit/
+
+# 运行集成测试
+uv run pytest backend/tests/integration/
+
+# 运行测试并查看覆盖率
+uv run pytest backend/tests/ --cov=backend --cov-report=html
+```
+
+## 📄 License
+
+MIT License
