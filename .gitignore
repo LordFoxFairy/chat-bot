@@ -1,53 +1,188 @@
-# ============== 模型和缓存 ==============
+# ============================================================
+# Chat-Bot .gitignore
+# ============================================================
+
+# ==================== 模型和缓存 ====================
+# AI 模型文件（体积大，应本地下载）
+.cache/
 models/
-/tmp/
-**/__pycache__/
-*.pyc
-*.pyo
+artifacts/
 
-# ============== IDE ==============
-.idea/
-*.iml
-.vscode/
+# Torch Hub 缓存
+torch_cache/
 
-# ============== 音频文件 ==============
-*.pcm
-*.wav
-*.mp3
+# Hugging Face 缓存
+.hf_cache/
+
+# ModelScope 缓存
+.modelscope/
+
+# ==================== 临时文件和输出 ====================
+tmp/
+temp/
 outputs/
+logs/
+docs/
+*.tmp
+*.log
+*.bak
 
-# ============== 敏感配置文件 ==============
-# 重要：所有包含真实密钥的配置文件都不应提交
-configs/*.conf
-configs/*.yaml
-!configs/*.example
-!src/configs/test_config.yaml
+# ==================== Python ====================
+# 字节码
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
 
-# 环境变量文件
-.env
+# 分发和打包
+dist/
+build/
+*.egg
+*.egg-info/
+.eggs/
+wheels/
+pip-wheel-metadata/
+MANIFEST
+
+# 虚拟环境
+.venv/
+venv/
+ENV/
+env/
 .env.local
 .env.*.local
 
-# ============== 测试 ==============
-src/tests/
+# 类型检查缓存
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Cython
+*.so
+
+# ==================== 测试 ====================
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+backend/tests/test_output/
 
-# ============== Desktop/Tauri ==============
-desktop/node_modules/
-desktop/dist/
-desktop/src-tauri/target/
+# ==================== IDE 和编辑器 ====================
+# PyCharm / IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
 
-# ============== 其他 ==============
-*.log
-*.tmp
+# VSCode
+.vscode/
+*.code-workspace
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+.#*
+
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
 
-artifacts/
-artifacts/**
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
 
-# ============== Python Build ==============
-*.egg-info/
-dist/
-build/
+# Linux
+*~
+
+# ==================== 敏感配置 ====================
+# 环境变量（包含 API Key）
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+
+# 配置文件（可能包含敏感信息）
+backend/configs/*.yaml
+backend/configs/*.yml
+backend/configs/*.conf
+backend/configs/*.json
+!backend/configs/*.example
+
+# 密钥和证书
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# ==================== 音频和媒体文件 ====================
+*.pcm
+*.wav
+*.mp3
+*.ogg
+*.flac
+*.m4a
+*.aac
+*.wma
+
+# ==================== Frontend/Tauri ====================
+# Node.js
+frontend/node_modules/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+
+# 构建输出
+frontend/dist/
+frontend/build/
+frontend/.next/
+frontend/out/
+
+# Tauri
+frontend/src-tauri/target/
+frontend/src-tauri/Cargo.lock
+
+# ==================== 其他 ====================
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# Profiling
+*.prof
+*.lprof
+
+# Local development
+*.local
+local_settings.py
+
+# UV / pip
+# uv.lock  # 应该提交，用于锁定依赖版本
+
+# Docker
+*.tar
+docker-compose.override.yml

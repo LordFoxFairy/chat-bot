@@ -1,0 +1,90 @@
+modules:
+  asr: # 自动语音识别 (ASR) 模块
+    enabled: true # 是否启用此模块
+    module_category: "asr" # 模块类别，用于工厂模式查找对应的适配器工厂
+    enable_module: "funasr_sensevoice" # 或者 "openai"，根据需要选择
+    adapter_type: "funasr_sensevoice"
+    config: # 此模块的特定配置
+      funasr_sensevoice:
+        model_dir: ".cache/models/asr/SenseVoiceSmall" # ASR 模型文件所在的目录路径
+        # 请确保此路径相对于项目根目录是正确的
+        device: "cpu" # 指定运行模型的设备 ("cpu" 或 "cuda" 如果GPU可用且已配置)
+        sample_rate: 16000 # ASR 期望的输入音频采样率 (例如 16000 Hz)
+        channels: 1 # ASR 期望的输入音频通道数 (例如 1 代表单声道)
+        sample_width: 2 # 每个音频样本的字节数 (例如 2 代表 16-bit PCM 音频)
+        language: "zh" # 主要识别的语言代码 (例如 "zh", "en", "auto" 如果适配器支持自动检测)
+        # output_dir: "tmp/asr_intermediate_files" # 可选: 如果适配器支持，可以指定保存中间结果的目录
+
+  llm: # 大语言模型 (LLM) 模块
+    enabled: true
+    module_category: "llm"
+    adapter_type: "langchain"
+
+    # 选择激活的配置
+    enable_module: "default"
+
+    system_prompt: "你是一个非常乐于助人的AI智能助手，请用友善和专业的语气回答问题。"
+
+    config:
+      # 默认配置 - 使用统一的 API_KEY 环境变量
+      # init_chat_model 会根据 model_name 自动选择正确的客户端
+      default:
+        model_name: "claude-sonnet-4-20250514"  # 自动检测为 Anthropic
+        # model_name: "gpt-4"                   # 自动检测为 OpenAI
+        # model_name: "anthropic/claude-3-opus" # 带 base_url 使用 OpenAI 兼容
+        api_key_env_var: "API_KEY"              # 统一使用 API_KEY 环境变量
+        # base_url: "https://openrouter.ai/api/v1"  # 可选，用于自定义端点
+        temperature: 0.7
+        max_tokens: 4096
+
+  tts: # 文本轉語音 (TTS) 模塊的頂層配置
+    enabled: true               # 是否啟用此 TTS 模塊
+    module_category: "tts"      # 模塊類別，用於工廠模式
+    adapter_type: "edge_tts"    # 指定要使用的 TTS 適配器類型
+    save_generated_audio: true
+    audio_save_path: "outputs/tts_audio/"
+    config:
+      edge_tts:
+        voice: "zh-CN-XiaoxiaoNeural"
+        rate: "+0%"
+        volume: "+0%"
+        output_audio_format: "wav"
+        sample_rate: 16000
+
+
+  vad: # 语音活动检测 (VAD) 模块
+    enabled: true
+    module_category: "vad"
+    adapter_type: "silero_vad"
+    config:
+      silero_vad:
+        model_repo_path: ".cache/models/vad/silero-vad"
+        model_name: "silero_vad"
+        threshold: 0.5
+        vad_sample_rate: 16000
+        # min_silence_duration_ms: 100 # 这个是VAD内部参数，ChatEngine用下面那个
+        min_silence_duration_ms_eos: 1200 # ChatEngine判断语句结束的静默阈值 (ms)
+        max_speech_segment_duration_ms: 5000 # 新增：最长语音段持续时间 (ms)，超过则强制ASR
+        window_size_samples: 512 # VAD处理窗口大小（样本数），例如 Silero VAD 16kHz下是512
+        device: "cpu"
+
+  handlers:
+    adapter_type: "websocket"
+    websocket:
+      host: "0.0.0.0"
+      port: 8765
+      websocket_max_message_size: 2097152 # WebSocket 消息的最大大小 (字节, 例如 2MB，以容纳更大的音频块)
+
+
+# --- 全局应用设置 ---
+global_settings:
+  log_level: "INFO" # 应用的全局日志级别 ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+
+# --- 提示词激活功能设置 ---
+activation_settings:
+  enable_prompt_activation: true # 开关：是否启用提示词激活功能
+  activation_keywords: [ "你好小助手", "启动对话", "你好小爱", "你好助手" ] # 激活关键词列表
+  activation_timeout_seconds: 30 # 激活后，无交互的超时时间 (秒)
+  activation_reply: "你好！很高兴为您服务，请问有什么可以帮您的吗？" # 成功激活后的回复
+  deactivation_reply: "再见，本次服务结束，期待下次能继续帮助您。" # 超时或明确指令导致失活时的回复
+  prompt_if_not_activated: "请输入激活指令开始对话，例如“你好小助手”。" # (可选) 当未激活时收到非激活指令的提示

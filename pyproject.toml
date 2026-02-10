@@ -29,8 +29,8 @@ dependencies = [
 ]
 
 [project.scripts]
-chatbot = "src.cli:main"
-chat-bot = "src.cli:main"
+chatbot = "backend.main:main"
+chat-bot = "backend.main:main"
 
 [project.optional-dependencies]
 # ASR/VAD dependencies (requires Python < 3.13 for some packages)
@@ -63,11 +63,11 @@ build = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
+include = ["backend*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
-testpaths = ["tests"]
+testpaths = ["backend/tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
