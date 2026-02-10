@@ -45,9 +45,9 @@ def mock_funasr_module():
 class TestFunASRSenseVoiceAdapter:
 
     @pytest.mark.asyncio
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
     @patch('os.path.exists')
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.AutoModel')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
     async def test_initialization_success(self, mock_auto_model, mock_exists, mock_config):
         """测试正常初始化"""
         # 设置
@@ -72,14 +72,14 @@ class TestFunASRSenseVoiceAdapter:
         assert 'output_dir' in call_kwargs
 
     @pytest.mark.asyncio
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', False)
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', False)
     async def test_init_library_not_installed(self, mock_config):
         """测试库未安装时的初始化"""
         with pytest.raises(ModuleInitializationError, match="funasr 库未安装"):
             FunASRSenseVoiceAdapter("test_asr", mock_config)
 
     @pytest.mark.asyncio
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
     @patch('os.path.exists')
     async def test_init_model_dir_not_found(self, mock_exists, mock_config):
         """测试模型目录不存在"""
@@ -91,9 +91,9 @@ class TestFunASRSenseVoiceAdapter:
             await adapter.setup()
 
     @pytest.mark.asyncio
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
     @patch('os.path.exists')
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.AutoModel')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
     async def test_init_automodel_failure(self, mock_auto_model, mock_exists, mock_config):
         """测试 AutoModel 初始化失败"""
         mock_exists.return_value = True
@@ -105,10 +105,10 @@ class TestFunASRSenseVoiceAdapter:
             await adapter.setup()
 
     @pytest.mark.asyncio
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
     @patch('os.path.exists')
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.AutoModel')
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.convert_audio_format')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.convert_audio_format')
     async def test_recognize_success(self, mock_convert, mock_auto_model, mock_exists, mock_config, mock_audio_data):
         """测试正常的语音识别流程"""
         # 设置
@@ -140,9 +140,9 @@ class TestFunASRSenseVoiceAdapter:
         assert 'fs' in call_kwargs
 
     @pytest.mark.asyncio
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
     @patch('os.path.exists')
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.AutoModel')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
     async def test_recognize_uninitialized(self, mock_auto_model, mock_exists, mock_config, mock_audio_data):
         """测试未初始化直接调用识别"""
         mock_exists.return_value = True
@@ -154,10 +154,10 @@ class TestFunASRSenseVoiceAdapter:
             await adapter.recognize(mock_audio_data)
 
     @pytest.mark.asyncio
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
     @patch('os.path.exists')
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.AutoModel')
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.convert_audio_format')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.convert_audio_format')
     async def test_recognize_preprocess_fail(self, mock_convert, mock_auto_model, mock_exists, mock_config, mock_audio_data):
         """测试预处理失败（返回空）"""
         mock_exists.return_value = True
@@ -171,10 +171,10 @@ class TestFunASRSenseVoiceAdapter:
         assert result == ""
 
     @pytest.mark.asyncio
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
     @patch('os.path.exists')
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.AutoModel')
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.convert_audio_format')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.convert_audio_format')
     async def test_recognize_inference_error(self, mock_convert, mock_auto_model, mock_exists, mock_config, mock_audio_data):
         """测试推理过程出错"""
         mock_exists.return_value = True
@@ -191,9 +191,9 @@ class TestFunASRSenseVoiceAdapter:
             await adapter.recognize(mock_audio_data)
 
     @pytest.mark.asyncio
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
     @patch('os.path.exists')
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.AutoModel')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
     async def test_text_extraction(self, mock_auto_model, mock_exists, mock_config):
         """测试文本提取逻辑"""
         mock_exists.return_value = True
@@ -219,9 +219,9 @@ class TestFunASRSenseVoiceAdapter:
         assert res4 == ""
 
     @pytest.mark.asyncio
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
     @patch('os.path.exists')
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.AutoModel')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
     async def test_cleanup(self, mock_auto_model, mock_exists, mock_config):
         """测试资源清理"""
         mock_exists.return_value = True
@@ -238,9 +238,9 @@ class TestFunASRSenseVoiceAdapter:
         assert adapter.model is None
 
     @pytest.mark.asyncio
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
     @patch('os.path.exists')
-    @patch('src.adapters.asr.funasr_sensevoice_adapter.AutoModel')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
     async def test_cleanup_cuda(self, mock_auto_model, mock_exists, mock_config):
         """测试 CUDA 资源清理"""
         mock_exists.return_value = True

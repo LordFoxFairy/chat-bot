@@ -61,7 +61,7 @@ class TestAdapterRegistry:
 
     def test_dynamic_import_class(self):
         """测试动态导入类"""
-        with patch('src.core.adapter_registry.import_module') as mock_import:
+        with patch('backend.core.adapter_registry.import_module') as mock_import:
             mock_module = Mock()
             mock_module.MyAdapter = MockAdapterImpl
             mock_import.return_value = mock_module
@@ -74,7 +74,7 @@ class TestAdapterRegistry:
 
     def test_dynamic_import_loader(self):
         """测试动态导入加载函数"""
-        with patch('src.core.adapter_registry.import_module') as mock_import:
+        with patch('backend.core.adapter_registry.import_module') as mock_import:
             mock_module = Mock()
             mock_module.load = Mock(return_value=MockAdapterImpl)
             mock_import.return_value = mock_module
@@ -88,7 +88,7 @@ class TestAdapterRegistry:
 
     def test_import_error(self):
         """测试导入失败"""
-        with patch('src.core.adapter_registry.import_module', side_effect=ImportError("No module")):
+        with patch('backend.core.adapter_registry.import_module', side_effect=ImportError("No module")):
             self.registry.register("missing", "missing.module:Class")
 
             with pytest.raises(ModuleInitializationError) as excinfo:

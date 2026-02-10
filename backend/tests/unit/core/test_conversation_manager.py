@@ -26,7 +26,7 @@ class TestConversationManager:
         send_callback = AsyncMock()
 
         # Mock ConversationHandler
-        with patch('src.core.session.conversation_manager.ConversationOrchestrator') as MockHandler:
+        with patch('backend.core.session.conversation_manager.ConversationOrchestrator') as MockHandler:
             mock_handler = AsyncMock()
             MockHandler.return_value = mock_handler
 
@@ -53,7 +53,7 @@ class TestConversationManager:
 
         send_callback = AsyncMock()
 
-        with patch('src.core.session.conversation_manager.ConversationOrchestrator') as MockHandler:
+        with patch('backend.core.session.conversation_manager.ConversationOrchestrator') as MockHandler:
             mock_handler = AsyncMock()
             MockHandler.return_value = mock_handler
 
@@ -83,7 +83,7 @@ class TestConversationManager:
 
         send_callback = AsyncMock()
 
-        with patch('src.core.session.conversation_manager.ConversationOrchestrator') as MockHandler:
+        with patch('backend.core.session.conversation_manager.ConversationOrchestrator') as MockHandler:
             mock_handler = AsyncMock()
             MockHandler.return_value = mock_handler
 
@@ -113,7 +113,7 @@ class TestConversationManager:
         """测试销毁所有处理器"""
         send_callback = AsyncMock()
 
-        with patch('src.core.session.conversation_manager.ConversationOrchestrator') as MockHandler:
+        with patch('backend.core.session.conversation_manager.ConversationOrchestrator') as MockHandler:
             mock_handler1 = AsyncMock()
             mock_handler2 = AsyncMock()
             MockHandler.side_effect = [mock_handler1, mock_handler2]
@@ -148,7 +148,7 @@ class TestConversationManager:
 
         send_callback = AsyncMock()
 
-        with patch('src.core.session.conversation_manager.ConversationOrchestrator') as MockHandler:
+        with patch('backend.core.session.conversation_manager.ConversationOrchestrator') as MockHandler:
             mock_handler = AsyncMock()
             MockHandler.return_value = mock_handler
 

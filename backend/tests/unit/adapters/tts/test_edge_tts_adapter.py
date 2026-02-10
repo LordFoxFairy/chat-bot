@@ -9,13 +9,13 @@ from backend.core.models.exceptions import ModuleInitializationError, ModuleProc
 # 模拟 edge_tts 模块
 @pytest.fixture
 def mock_edge_tts():
-    with patch("src.adapters.tts.edge_tts_adapter.edge_tts") as mock:
+    with patch("backend.adapters.tts.edge_tts_adapter.edge_tts") as mock:
         yield mock
 
 # 模拟 EDGE_TTS_AVAILABLE 标志为 True
 @pytest.fixture
 def mock_edge_tts_available(mock_edge_tts):
-    with patch("src.adapters.tts.edge_tts_adapter.EDGE_TTS_AVAILABLE", True):
+    with patch("backend.adapters.tts.edge_tts_adapter.EDGE_TTS_AVAILABLE", True):
         yield mock_edge_tts
 
 @pytest.fixture
@@ -53,7 +53,7 @@ async def test_initialization_defaults(mock_edge_tts_available):
 
 def test_initialization_library_not_available():
     """测试 edge-tts 库不可用时的处理"""
-    with patch("src.adapters.tts.edge_tts_adapter.EDGE_TTS_AVAILABLE", False):
+    with patch("backend.adapters.tts.edge_tts_adapter.EDGE_TTS_AVAILABLE", False):
         with pytest.raises(ModuleInitializationError, match="edge-tts 库未安装"):
             EdgeTTSAdapter("test_edge_tts_fail", {})
 

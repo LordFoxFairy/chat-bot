@@ -5,7 +5,7 @@ from backend.core.interfaces.base_vad import BaseVAD
 
 # 创建并配置注册器
 vad_registry: AdapterRegistry[BaseVAD] = AdapterRegistry("VAD", BaseVAD)
-vad_registry.register("silero_vad", "src.adapters.vad.silero_vad_adapter")
+vad_registry.register("silero_vad", "backend.adapters.vad.silero_vad_adapter")
 
 # 导出工厂函数
 create_vad_adapter = create_factory_function(vad_registry)

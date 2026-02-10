@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 # 创建并配置注册器
 protocol_registry: AdapterRegistry[BaseProtocol] = AdapterRegistry("Protocol", BaseProtocol)
-protocol_registry.register("websocket", "src.adapters.protocols.websocket_protocol_adapter")
+protocol_registry.register("websocket", "backend.adapters.protocols.websocket_protocol_adapter")
 
 
 def create_protocol_adapter(

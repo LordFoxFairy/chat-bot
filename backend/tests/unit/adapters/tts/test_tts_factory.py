@@ -48,7 +48,7 @@ class TestTTSFactory:
         mock_module = MagicMock()
         mock_module.load.return_value = MockTTSAdapter
 
-        with patch("src.core.adapter_registry.import_module", return_value=mock_module):
+        with patch("backend.core.adapter_registry.import_module", return_value=mock_module):
             tts_registry.register("test_module_load", "some.module.path")
 
             adapter = create_tts_adapter("test_module_load", "test_id", {})
@@ -61,7 +61,7 @@ class TestTTSFactory:
         mock_module = MagicMock()
         mock_module.MockTTSAdapter = MockTTSAdapter
 
-        with patch("src.core.adapter_registry.import_module", return_value=mock_module):
+        with patch("backend.core.adapter_registry.import_module", return_value=mock_module):
             tts_registry.register("test_class_path", "some.module.path:MockTTSAdapter")
 
             adapter = create_tts_adapter("test_class_path", "test_id", {})

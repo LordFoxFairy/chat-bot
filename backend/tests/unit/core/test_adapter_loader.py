@@ -109,11 +109,11 @@ class TestCreateDefaultLoader:
 
         # Mock 所有工厂导入，避免依赖实际实现
         with patch.dict('sys.modules', {
-            'src.adapters.asr.asr_factory': Mock(create_asr_adapter=Mock()),
-            'src.adapters.llm.llm_factory': Mock(create_llm_adapter=Mock()),
-            'src.adapters.protocols.protocol_factory': Mock(create_protocol_adapter=Mock()),
-            'src.adapters.tts.tts_factory': Mock(create_tts_adapter=Mock()),
-            'src.adapters.vad.vad_factory': Mock(create_vad_adapter=Mock()),
+            'backend.adapters.asr.asr_factory': Mock(create_asr_adapter=Mock()),
+            'backend.adapters.llm.llm_factory': Mock(create_llm_adapter=Mock()),
+            'backend.adapters.protocols.protocol_factory': Mock(create_protocol_adapter=Mock()),
+            'backend.adapters.tts.tts_factory': Mock(create_tts_adapter=Mock()),
+            'backend.adapters.vad.vad_factory': Mock(create_vad_adapter=Mock()),
         }):
             loader = create_default_loader()
 

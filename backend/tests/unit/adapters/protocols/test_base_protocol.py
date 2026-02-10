@@ -55,7 +55,7 @@ class TestBaseProtocol:
         message = register_event.model_dump_json()
 
         # 模拟 AppContext.get_module
-        with patch('src.core.app_context.AppContext.get_module') as mock_get_module:
+        with patch('backend.core.app_context.AppContext.get_module') as mock_get_module:
             await protocol.handle_text_message(mock_connection, message)
 
         # 验证会话创建

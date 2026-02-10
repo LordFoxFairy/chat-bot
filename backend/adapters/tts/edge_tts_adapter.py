@@ -81,7 +81,7 @@ class EdgeTTSAdapter(BaseTTS):
         if not text.text or not text.text.strip():
             logger.debug(f"TTS/EdgeTTS [{self.module_id}] 文本为空")
             yield AudioData(
-                data=b"",
+                data=b" ",  # 使用占位符数据，因为 AudioData 不允许空 bytes
                 format=self.output_format,
                 is_final=True,
                 metadata={"status": "empty_input"}
@@ -117,9 +117,9 @@ class EdgeTTSAdapter(BaseTTS):
 
             logger.debug(f"TTS/EdgeTTS [{self.module_id}] 合成结束，共 {chunk_index} 个音频块")
 
-            # 发送最终标记
+            # 发送最终标记（使用占位符数据，因为 AudioData 不允许空 bytes）
             yield AudioData(
-                data=b"",
+                data=b" ",
                 format=self.output_format,
                 is_final=True,
                 metadata={"status": "complete", "total_chunks": chunk_index}

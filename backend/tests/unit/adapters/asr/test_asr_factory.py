@@ -22,7 +22,7 @@ def test_asr_registry_config():
 def test_create_asr_adapter_factory():
     """测试工厂函数"""
     # 模拟 import_module 以避免实际加载适配器
-    with patch('src.core.adapter_registry.import_module') as mock_import:
+    with patch('backend.core.adapter_registry.import_module') as mock_import:
         # 准备 mock 模块
         mock_module = MagicMock()
 
@@ -39,7 +39,7 @@ def test_create_asr_adapter_factory():
 
         # 验证
         assert isinstance(adapter, MockAdapterClass)
-        mock_import.assert_called_with("src.adapters.asr.funasr_sensevoice_adapter")
+        mock_import.assert_called_with("backend.adapters.asr.funasr_sensevoice_adapter")
         mock_module.load.assert_called_once()
 
 
