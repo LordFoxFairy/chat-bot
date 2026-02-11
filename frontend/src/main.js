@@ -144,6 +144,14 @@ function handleStreamEvent(event) {
             addErrorMessage(event_data?.text || 'An error occurred');
             break;
 
+        case 'CONFIG_SNAPSHOT':
+            handleConfigSnapshot(event_data);
+            break;
+
+        case 'MODULE_STATUS_REPORT':
+            handleStatusReport(event_data);
+            break;
+
         default:
             console.log('Unknown event type:', event_type, event);
     }
@@ -213,8 +221,15 @@ async function playNextAudio() {
             });
         }
 
-        // Convert PCM to AudioBuffer
-        const audioBuffer = pcmToAudioBuffer(audioData);
+        // 检测音频格式并解码
+        const audioBuffer = await decodeAudioData(audioData);
+        if (!audioBuffer) {
+            console.error('Failed to decode audio data');
+            isPlayingAudio = false;
+            playNextAudio();
+            return;
+        }
+
         const source = audioContext.createBufferSource();
         source.buffer = audioBuffer;
         source.connect(audioContext.destination);
@@ -229,6 +244,35 @@ async function playNextAudio() {
         console.error('Audio playback error:', error);
         isPlayingAudio = false;
         playNextAudio();
+    }
+}
+
+/**
+ * 检测并解码音频数据
+ * 支持 MP3, WAV, PCM 等格式
+ */
+async function decodeAudioData(arrayBuffer) {
+    // 检测是否是 MP3 格式 (以 ID3 标签或 0xFF 0xFB 开头)
+    const header = new Uint8Array(arrayBuffer.slice(0, 4));
+    const isMP3 = (header[0] === 0x49 && header[1] === 0x44 && header[2] === 0x33) ||  // ID3
+                  (header[0] === 0xFF && (header[1] & 0xE0) === 0xE0);  // MP3 frame sync
+
+    // 检测是否是 WAV 格式 (以 RIFF 开头)
+    const isWAV = (header[0] === 0x52 && header[1] === 0x49 && header[2] === 0x46 && header[3] === 0x46);
+
+    if (isMP3 || isWAV) {
+        // 使用 Web Audio API 解码压缩音频
+        try {
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+            return audioBuffer;
+        } catch (error) {
+            console.error('Failed to decode compressed audio:', error);
+            // 降级到 PCM 处理
+            return pcmToAudioBuffer(arrayBuffer);
+        }
+    } else {
+        // 假设是 PCM 16-bit 数据
+        return pcmToAudioBuffer(arrayBuffer);
     }
 }
 
@@ -424,6 +468,226 @@ function setupEventListeners() {
         e.preventDefault();
         stopRecording();
     });
+
+    // Configuration Modal
+    setupConfigListeners();
+}
+
+// Configuration & Status
+const configModal = document.getElementById('config-modal');
+const settingsBtn = document.getElementById('settings-btn');
+const closeConfigBtn = document.getElementById('close-config-btn');
+const refreshStatusBtn = document.getElementById('refresh-status-btn');
+const reloadConfigBtn = document.getElementById('reload-config-btn');
+const saveConfigBtn = document.getElementById('save-config-btn');
+const statusGrid = document.getElementById('module-status-grid');
+const configContainer = document.getElementById('config-container');
+
+let currentConfig = null;
+
+function setupConfigListeners() {
+    // Open modal
+    settingsBtn.addEventListener('click', () => {
+        configModal.classList.remove('hidden');
+        requestConfig();
+        requestModuleStatus();
+    });
+
+    // Close modal
+    closeConfigBtn.addEventListener('click', () => {
+        configModal.classList.add('hidden');
+    });
+
+    // Close when clicking outside
+    configModal.addEventListener('click', (e) => {
+        if (e.target === configModal) {
+            configModal.classList.add('hidden');
+        }
+    });
+
+    // Refresh status
+    refreshStatusBtn.addEventListener('click', requestModuleStatus);
+
+    // Reload config
+    reloadConfigBtn.addEventListener('click', requestConfig);
+
+    // Save config
+    saveConfigBtn.addEventListener('click', saveConfig);
+}
+
+function requestConfig() {
+    sendEvent('CONFIG_GET', {});
+    configContainer.innerHTML = '<div class="loading-spinner">Loading configuration...</div>';
+}
+
+function requestModuleStatus() {
+    sendEvent('MODULE_STATUS_GET', {});
+
+    // Add pulsing effect to existing cards to show loading
+    const cards = statusGrid.querySelectorAll('.status-card');
+    if (cards.length === 0) {
+        // Show skeleton if no cards
+        statusGrid.innerHTML = `
+            <div class="status-card skeleton"></div>
+            <div class="status-card skeleton"></div>
+            <div class="status-card skeleton"></div>
+            <div class="status-card skeleton"></div>
+        `;
+    } else {
+        cards.forEach(card => card.style.opacity = '0.7');
+    }
+}
+
+function handleConfigSnapshot(config) {
+    currentConfig = config;
+    renderConfig(config);
+}
+
+function renderConfig(config) {
+    configContainer.innerHTML = '';
+
+    // Iterate through sections (e.g., asr, vad, llm, tts)
+    for (const [sectionKey, sectionData] of Object.entries(config)) {
+        if (typeof sectionData !== 'object' || sectionData === null) continue;
+
+        const group = document.createElement('div');
+        group.className = 'config-group';
+
+        const header = document.createElement('div');
+        header.className = 'config-group-header';
+        header.textContent = sectionKey.toUpperCase();
+        group.appendChild(header);
+
+        let hasItems = false;
+
+        // Iterate through items in section
+        for (const [key, value] of Object.entries(sectionData)) {
+            // Skip large objects or arrays for simple UI
+            if (typeof value === 'object' && value !== null) continue;
+
+            hasItems = true;
+            const item = document.createElement('div');
+            item.className = 'config-item';
+
+            const label = document.createElement('label');
+            label.className = 'config-label';
+            label.textContent = formatConfigKey(key);
+            item.appendChild(label);
+
+            let input;
+
+            if (typeof value === 'boolean') {
+                input = document.createElement('select');
+                input.className = 'config-select';
+                input.innerHTML = `
+                    <option value="true" ${value ? 'selected' : ''}>Enabled</option>
+                    <option value="false" ${!value ? 'selected' : ''}>Disabled</option>
+                `;
+                input.dataset.type = 'boolean';
+            } else if (typeof value === 'number') {
+                input = document.createElement('input');
+                input.type = 'number';
+                input.className = 'config-input';
+                input.value = value;
+                input.dataset.type = 'number';
+            } else {
+                input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'config-input';
+                input.value = value;
+                input.dataset.type = 'string';
+            }
+
+            input.dataset.section = sectionKey;
+            input.dataset.key = key;
+            item.appendChild(input);
+            group.appendChild(item);
+        }
+
+        if (hasItems) {
+            configContainer.appendChild(group);
+        }
+    }
+
+    if (configContainer.children.length === 0) {
+        configContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">No editable configuration found</div>';
+    }
+}
+
+function formatConfigKey(key) {
+    return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function saveConfig() {
+    if (!currentConfig) return;
+
+    const newConfig = JSON.parse(JSON.stringify(currentConfig));
+    const inputs = configContainer.querySelectorAll('input, select');
+
+    inputs.forEach(input => {
+        const section = input.dataset.section;
+        const key = input.dataset.key;
+        const type = input.dataset.type;
+
+        let value = input.value;
+
+        if (type === 'boolean') {
+            value = value === 'true';
+        } else if (type === 'number') {
+            value = parseFloat(value);
+        }
+
+        if (newConfig[section]) {
+            newConfig[section][key] = value;
+        }
+    });
+
+    sendEvent('CONFIG_SET', newConfig);
+
+    // Provide feedback
+    saveConfigBtn.textContent = 'Saved!';
+    saveConfigBtn.style.backgroundColor = 'var(--success-color)';
+    setTimeout(() => {
+        saveConfigBtn.textContent = 'Save Changes';
+        saveConfigBtn.style.backgroundColor = '';
+    }, 2000);
+}
+
+function handleStatusReport(status) {
+    statusGrid.innerHTML = '';
+
+    for (const [module, state] of Object.entries(status)) {
+        const card = document.createElement('div');
+        const isRunning = state === 'running' || state === true || (typeof state === 'object' && state.status === 'running');
+        const isError = state === 'error' || (typeof state === 'object' && state.status === 'error');
+
+        let statusClass = 'stopped';
+        let statusIcon = '●';
+        let statusText = 'Stopped';
+
+        if (isRunning) {
+            statusClass = 'running';
+            statusText = 'Running';
+        } else if (isError) {
+            statusClass = 'error';
+            statusText = 'Error';
+            statusIcon = '⚠';
+        }
+
+        card.className = `status-card ${statusClass}`;
+
+        const name = module.toUpperCase();
+
+        card.innerHTML = `
+            <span class="module-name">${name}</span>
+            <div class="module-state">
+                <span>${statusIcon}</span>
+                <span>${statusText}</span>
+            </div>
+        `;
+
+        statusGrid.appendChild(card);
+    }
 }
 
 // Utilities
