@@ -5,6 +5,7 @@ import os
 import json
 from typing import Optional, Dict, Any, Union
 from backend.core.config_models import LoggingConfig
+from backend.utils.paths import resolve_project_path
 
 # 全局默认 logger
 logger = logging.getLogger("chat-bot")
@@ -80,11 +81,13 @@ def setup_logging(config: Optional[Union[LoggingConfig, Dict[str, Any]]] = None)
 
     # 添加文件处理器 (如果配置了路径)
     if config.file_path:
+        # 将相对路径解析为相对于项目根目录的绝对路径
+        log_file_path = resolve_project_path(config.file_path)
         # 确保日志目录存在
-        log_dir = os.path.dirname(config.file_path)
-        if log_dir and not os.path.exists(log_dir):
+        log_dir = log_file_path.parent
+        if not log_dir.exists():
             try:
-                os.makedirs(log_dir)
+                log_dir.mkdir(parents=True, exist_ok=True)
             except OSError as e:
                 # 如果创建目录失败，记录错误但不要崩溃，继续使用控制台日志
                 sys.stderr.write(f"Failed to create log directory {log_dir}: {e}\n")
@@ -92,7 +95,7 @@ def setup_logging(config: Optional[Union[LoggingConfig, Dict[str, Any]]] = None)
 
         try:
             file_handler = logging.handlers.RotatingFileHandler(
-                filename=config.file_path,
+                filename=str(log_file_path),
                 maxBytes=config.max_bytes,
                 backupCount=config.backup_count,
                 encoding=config.encoding
