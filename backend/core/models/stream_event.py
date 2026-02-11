@@ -41,6 +41,13 @@ class EventType(str, Enum):
     # 错误事件
     ERROR = "error"
 
+    # 配置管理事件
+    CONFIG_GET = "CONFIG_GET"
+    CONFIG_SET = "CONFIG_SET"
+    CONFIG_SNAPSHOT = "CONFIG_SNAPSHOT"
+    MODULE_STATUS_GET = "MODULE_STATUS_GET"
+    MODULE_STATUS_REPORT = "MODULE_STATUS_REPORT"
+
 
 class StreamState(str, Enum):
     """流状态枚举"""
@@ -69,7 +76,7 @@ class StreamEvent(BaseModel):
     """
 
     event_type: EventType
-    event_data: Optional[Union[TextData, AudioData]] = Field(default=None)
+    event_data: Optional[Union[TextData, AudioData, Dict[str, Any]]] = Field(default=None)
     tag_id: Optional[str] = Field(default=None)
     session_id: Optional[str] = Field(default=None)
     timestamp: float = Field(default_factory=time.time)
@@ -88,7 +95,12 @@ class StreamEvent(BaseModel):
         event_type_raw = data.get('event_type')
         event_data_payload = data.get('event_data')
 
-        if not event_type_raw or event_data_payload is None:
+        # 如果 event_data 为空或 None，设为 None
+        if event_data_payload is None or event_data_payload == {}:
+            data['event_data'] = None
+            return data
+
+        if not event_type_raw:
             return data
 
         # 转换事件类型
@@ -115,6 +127,18 @@ class StreamEvent(BaseModel):
                             pass  # 保持原样
 
                 data['event_data'] = expected_type.model_validate(event_data_payload)
+            elif event_type in (
+                EventType.CONFIG_GET,
+                EventType.CONFIG_SET,
+                EventType.CONFIG_SNAPSHOT,
+                EventType.MODULE_STATUS_GET,
+                EventType.MODULE_STATUS_REPORT,
+            ):
+                # 配置相关事件，保留原始字典
+                data['event_data'] = event_data_payload
+            else:
+                # 没有映射的事件类型，event_data 保持为 None
+                data['event_data'] = None
 
         return data
 
@@ -130,6 +154,9 @@ class StreamEvent(BaseModel):
             event_dict['event_data']['data'] = base64.b64encode(
                 self.event_data.data
             ).decode('utf-8')
+        # 配置事件：event_data 是原始字典，直接序列化
+        elif isinstance(self.event_data, dict):
+            event_dict['event_data'] = self.event_data
 
         return json.dumps(event_dict, ensure_ascii=False)
 

@@ -5,10 +5,17 @@ Chat Bot 统一入口
 
 import argparse
 import asyncio
+import logging
 import os
 import subprocess
 import sys
+import warnings
 from pathlib import Path
+
+# 抑制外部库的警告
+warnings.filterwarnings("ignore", message=".*Couldn't find ffmpeg.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="pydub")
+logging.getLogger("root").setLevel(logging.ERROR)
 
 
 def get_project_root() -> Path:
@@ -22,7 +29,7 @@ def run_server() -> None:
     sys.path.insert(0, str(project_root))
 
     from backend.utils.config_loader import ConfigLoader
-    from backend.utils.logging_setup import logger
+    from backend.utils.logging_setup import logger, setup_logging
     from backend.core.engine.chat_engine import ChatEngine
     from backend.core.session.session_manager import SessionManager, InMemoryStorage
 
@@ -43,6 +50,13 @@ def run_server() -> None:
                 logger.critical(f"Failed to load config from '{config_path}'")
                 return
 
+            # 初始化日志
+            if "logging" in config:
+                setup_logging(config["logging"])
+            elif "global_settings" in config and "log_level" in config["global_settings"]:
+                # 兼容旧配置
+                setup_logging({"level": config["global_settings"]["log_level"]})
+
             # 创建 SessionManager
             storage_backend = InMemoryStorage(maxsize=10000)
             session_manager = SessionManager(storage_backend=storage_backend)
@@ -53,7 +67,14 @@ def run_server() -> None:
             # 初始化所有模块
             await chat_engine.initialize()
 
-            logger.info("[Server] Ready and waiting for client connections...")
+            # 启动协议服务器（WebSocket）
+            protocol = chat_engine.protocol_modules.get("protocols")
+            if protocol:
+                logger.info("[Server] Ready and waiting for client connections...")
+                await protocol.start()  # 这会阻塞直到服务器关闭
+            else:
+                logger.error("[Server] No protocol module configured, server cannot accept connections")
+                return
 
         except Exception as e:
             logger.error(f"Server startup error: {e}", exc_info=True)

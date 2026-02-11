@@ -13,6 +13,20 @@ cd "$PROJECT_ROOT"
 echo "=== Chat Bot Desktop Development ==="
 echo "Project root: $PROJECT_ROOT"
 
+# Load .env file if exists
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    echo "Loading environment variables from .env..."
+    # Export all non-comment, non-empty lines
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Skip comments and empty lines
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$line" ]] && continue
+        # Export the variable
+        export "$line" 2>/dev/null || true
+    done < "$PROJECT_ROOT/.env"
+    echo "API_KEY loaded: ${API_KEY:0:20}..."
+fi
+
 # Set Python path
 export PYTHONPATH="$PROJECT_ROOT:$PYTHONPATH"
 
@@ -28,8 +42,9 @@ cleanup() {
 
 trap cleanup SIGINT SIGTERM
 
-# Start Python backend
+# Start Python backend (确保从项目根目录启动)
 echo "Starting Python backend..."
+cd "$PROJECT_ROOT"
 python3 -m backend.main server &
 PYTHON_PID=$!
 
