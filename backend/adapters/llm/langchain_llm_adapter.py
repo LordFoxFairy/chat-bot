@@ -10,7 +10,7 @@
 
 import asyncio
 import os
-from typing import Any, AsyncGenerator, Dict, Optional, Type
+from typing import Any, AsyncGenerator, Type
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -44,21 +44,21 @@ class LangChainLLMAdapter(BaseLLM):
     MAX_RETRIES = 3
     RETRY_DELAY = 1.0
 
-    def __init__(self, module_id: str, config: Dict[str, Any]):
+    def __init__(self, module_id: str, config: dict[str, Any]) -> None:
         super().__init__(module_id, config)
 
         # 统一三要素
-        self.api_key = self._resolve_api_key()
-        self.base_url = self._resolve_base_url()
+        self.api_key: str = self._resolve_api_key()
+        self.base_url: str | None = self._resolve_base_url()
 
         # 历史管理配置
-        self.max_history_length = config.get("max_history_length", self.MAX_HISTORY_LENGTH)
-        self.max_retries = config.get("max_retries", self.MAX_RETRIES)
-        self.retry_delay = config.get("retry_delay", self.RETRY_DELAY)
+        self.max_history_length: int = config.get("max_history_length", self.MAX_HISTORY_LENGTH)
+        self.max_retries: int = config.get("max_retries", self.MAX_RETRIES)
+        self.retry_delay: float = config.get("retry_delay", self.RETRY_DELAY)
 
         # 运行时状态
-        self.chat_histories: Dict[str, List[BaseMessage]] = {}
-        self.llm: Optional[BaseChatModel] = None
+        self.chat_histories: dict[str, list[BaseMessage]] = {}
+        self.llm: BaseChatModel | None = None
 
         logger.info(f"LLM [{self.module_id}] 配置:")
         logger.info(f"  - model: {self.model_name}")
@@ -85,7 +85,7 @@ class LangChainLLMAdapter(BaseLLM):
             f"缺少 API Key，请设置环境变量 '{api_key_env}' 或在配置中提供 'api_key'"
         )
 
-    def _resolve_base_url(self) -> Optional[str]:
+    def _resolve_base_url(self) -> str | None:
         """解析 Base URL"""
         if base_url_env := self.config.get("base_url_env_var"):
             if env_value := os.getenv(base_url_env):
@@ -97,7 +97,7 @@ class LangChainLLMAdapter(BaseLLM):
 
         使用 init_chat_model 自动选择正确的客户端。
         """
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "model": self.model_name,
             "api_key": self.api_key,
             "temperature": self.temperature,
@@ -124,7 +124,7 @@ class LangChainLLMAdapter(BaseLLM):
 
     def _init_model_fallback(self) -> BaseChatModel:
         """手动选择模型客户端（fallback）"""
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "temperature": self.temperature,
         }
         if self.max_tokens:

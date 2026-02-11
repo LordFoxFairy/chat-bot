@@ -1,10 +1,14 @@
 import asyncio
+import os
+import uuid
+from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, Type
 
 from backend.core.models.exceptions import ModuleInitializationError, ModuleProcessingError
 from backend.core.models import AudioData, TextData, AudioFormat
 from backend.core.interfaces.base_tts import BaseTTS
 from backend.utils.logging_setup import logger
+from backend.utils.paths import resolve_project_path
 
 # 动态导入 edge-tts
 try:
@@ -32,29 +36,42 @@ class EdgeTTSAdapter(BaseTTS):
         self,
         module_id: str,
         config: Dict[str, Any],
-    ):
+    ) -> None:
         super().__init__(module_id, config)
 
         if not EDGE_TTS_AVAILABLE:
             raise ModuleInitializationError("edge-tts 库未安装")
 
         # 读取 EdgeTTS 特定配置
-        self.rate = self.config.get("rate", self.DEFAULT_RATE)
-        self.volume = self.config.get("volume", self.DEFAULT_VOLUME)
-        self.pitch = self.config.get("pitch", self.DEFAULT_PITCH)
-        self.output_format = AudioFormat.MP3  # EdgeTTS 输出 MP3
+        self.rate: str = self.config.get("rate", self.DEFAULT_RATE)
+        self.volume: str = self.config.get("volume", self.DEFAULT_VOLUME)
+        self.pitch: str = self.config.get("pitch", self.DEFAULT_PITCH)
+        self.output_format: AudioFormat = AudioFormat.MP3  # EdgeTTS 输出 MP3
+
+        # 音频保存配置
+        self.save_audio: bool = self.config.get("save_generated_audio", False)
+        self.save_path: str = str(resolve_project_path(
+            self.config.get("audio_save_path", "outputs/tts_audio")
+        ))
 
         logger.info(f"TTS/EdgeTTS [{self.module_id}] 配置加载完成:")
         logger.info(f"  - voice: {self.voice}")
         logger.info(f"  - rate: {self.rate}")
         logger.info(f"  - volume: {self.volume}")
         logger.info(f"  - pitch: {self.pitch}")
+        if self.save_audio:
+            logger.info(f"  - 音频保存路径: {self.save_path}")
 
-    async def _setup_impl(self):
+    async def _setup_impl(self) -> None:
         """初始化 Edge TTS (内部实现)"""
         logger.info(f"TTS/EdgeTTS [{self.module_id}] 正在初始化...")
 
         try:
+            # 创建音频保存目录
+            if self.save_audio and self.save_path:
+                os.makedirs(self.save_path, exist_ok=True)
+                logger.info(f"TTS/EdgeTTS [{self.module_id}] 音频保存目录已创建: {self.save_path}")
+
             # 测试连接（带超时控制）
             async with asyncio.timeout(10.0):  # 10秒超时
                 communicate = edge_tts.Communicate("测试", self.voice)
@@ -100,6 +117,8 @@ class EdgeTTSAdapter(BaseTTS):
             )
 
             chunk_index = 0
+            audio_buffer: list[bytes] = []  # 用于保存音频数据
+
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
                     audio_bytes = chunk["data"]
@@ -107,6 +126,10 @@ class EdgeTTSAdapter(BaseTTS):
                         logger.debug(
                             f"TTS/EdgeTTS [{self.module_id}] 生成音频块 {chunk_index}: {len(audio_bytes)} 字节"
                         )
+                        # 收集音频数据用于保存
+                        if self.save_audio:
+                            audio_buffer.append(audio_bytes)
+
                         yield AudioData(
                             data=audio_bytes,
                             format=self.output_format,
@@ -117,17 +140,59 @@ class EdgeTTSAdapter(BaseTTS):
 
             logger.debug(f"TTS/EdgeTTS [{self.module_id}] 合成结束，共 {chunk_index} 个音频块")
 
+            # 保存音频文件
+            saved_path: str | None = None
+            if self.save_audio and audio_buffer:
+                saved_path = self._save_audio_file(audio_buffer, text.text)
+
             # 发送最终标记（使用占位符数据，因为 AudioData 不允许空 bytes）
             yield AudioData(
                 data=b" ",
                 format=self.output_format,
                 is_final=True,
-                metadata={"status": "complete", "total_chunks": chunk_index}
+                metadata={
+                    "status": "complete",
+                    "total_chunks": chunk_index,
+                    "saved_path": saved_path
+                }
             )
 
         except Exception as e:
             logger.error(f"TTS/EdgeTTS [{self.module_id}] 合成失败: {e}", exc_info=True)
             raise ModuleProcessingError(f"合成失败: {e}") from e
+
+    def _save_audio_file(self, audio_chunks: list[bytes], text: str) -> str | None:
+        """保存音频文件到指定目录
+
+        Args:
+            audio_chunks: 音频数据块列表
+            text: 原始文本（用于生成文件名）
+
+        Returns:
+            保存的文件路径，失败返回 None
+        """
+        try:
+            # 生成文件名: 时间戳_UUID_文本前缀.mp3
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            short_id = str(uuid.uuid4())[:8]
+            # 取文本前10个字符作为文件名一部分，过滤特殊字符
+            text_prefix = "".join(c for c in text[:10] if c.isalnum() or c in "_ ")
+            text_prefix = text_prefix.strip().replace(" ", "_") or "audio"
+
+            filename = f"{timestamp}_{short_id}_{text_prefix}.mp3"
+            filepath = os.path.join(self.save_path, filename)
+
+            # 合并并写入文件
+            audio_data = b"".join(audio_chunks)
+            with open(filepath, "wb") as f:
+                f.write(audio_data)
+
+            logger.info(f"TTS/EdgeTTS [{self.module_id}] 音频已保存: {filepath} ({len(audio_data)} 字节)")
+            return filepath
+
+        except Exception as e:
+            logger.error(f"TTS/EdgeTTS [{self.module_id}] 保存音频失败: {e}", exc_info=True)
+            return None
 
 
 def load() -> Type[BaseTTS]:

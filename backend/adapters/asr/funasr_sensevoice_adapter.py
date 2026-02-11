@@ -1,7 +1,8 @@
 import asyncio
-import os
+import logging
+import warnings
 from functools import partial
-from typing import Optional, Dict, Any, Type
+from typing import Any, Type
 
 import numpy as np
 
@@ -9,7 +10,12 @@ from backend.core.models.exceptions import ModuleInitializationError, ModuleProc
 from backend.core.models import AudioData
 from backend.core.interfaces.base_asr import BaseASR
 from backend.utils.audio_converter import convert_audio_format
+from backend.utils.paths import resolve_project_path
 from backend.utils.logging_setup import logger
+
+# 抑制外部库的警告
+warnings.filterwarnings("ignore", message=".*Couldn't find ffmpeg.*")
+logging.getLogger("root").setLevel(logging.ERROR)  # FunASR trust_remote_code warning
 
 # 动态导入 FunASR
 try:
@@ -29,40 +35,40 @@ class FunASRSenseVoiceAdapter(BaseASR):
     """
 
     # 默认配置常量
-    DEFAULT_MODEL_DIR = ".cache/models/asr/SenseVoiceSmall"
+    DEFAULT_MODEL_DIR = "outputs/models/asr/SenseVoiceSmall"
     DEFAULT_DEVICE = "cpu"
     DEFAULT_CHUNK_SIZE = [5, 10, 5]
 
     def __init__(
         self,
         module_id: str,
-        config: Dict[str, Any],
-    ):
+        config: dict[str, Any],
+    ) -> None:
         super().__init__(module_id, config)
 
         if not FUNASR_AVAILABLE:
             raise ModuleInitializationError("funasr 库未安装")
 
         # 读取 FunASR 特定配置
-        self.model_dir = self.config.get("model_dir", self.DEFAULT_MODEL_DIR)
-        self.device = self.config.get("device", self.DEFAULT_DEVICE)
-        self.vad_chunk_size = self.config.get("vad_chunk_size")
-        self.output_dir = self.config.get("output_dir")
+        self.model_dir: str = self.config.get("model_dir", self.DEFAULT_MODEL_DIR)
+        self.device: str = self.config.get("device", self.DEFAULT_DEVICE)
+        self.vad_chunk_size: int | None = self.config.get("vad_chunk_size")
+        self.output_dir: str | None = self.config.get("output_dir")
 
-        self.model: Optional[AutoModel] = None
+        self.model: AutoModel | None = None
 
         logger.info(f"ASR/FunASR [{self.module_id}] 配置加载完成:")
         logger.info(f"  - 模型目录: {self.model_dir}")
         logger.info(f"  - 设备: {self.device}")
 
-    async def _setup_impl(self):
+    async def _setup_impl(self) -> None:
         """初始化 FunASR SenseVoice 模型 (内部实现)"""
         logger.info(f"ASR/FunASR [{self.module_id}] 正在初始化模型...")
 
         try:
             # 验证模型路径
-            model_path = os.path.abspath(self.model_dir)
-            if not os.path.exists(model_path):
+            model_path = resolve_project_path(self.model_dir)
+            if not model_path.exists():
                 raise ModuleInitializationError(f"模型目录不存在: {model_path}")
 
             logger.info(f"ASR/FunASR [{self.module_id}] 从 {model_path} 加载模型...")
@@ -75,14 +81,14 @@ class FunASRSenseVoiceAdapter(BaseASR):
             ]
 
             params = {
-                "model": model_path,
+                "model": str(model_path),
                 "device": self.device,
                 "disable_pbar": True,
                 "chunk_size": chunk_size,
             }
 
             if self.output_dir:
-                params["output_dir"] = os.path.abspath(self.output_dir)
+                params["output_dir"] = str(resolve_project_path(self.output_dir))
 
             logger.debug(f"ASR/FunASR [{self.module_id}] 模型参数: {params}")
 
@@ -125,7 +131,7 @@ class FunASRSenseVoiceAdapter(BaseASR):
             logger.error(f"ASR/FunASR [{self.module_id}] 推理失败: {e}", exc_info=True)
             raise ModuleProcessingError(f"推理失败: {e}") from e
 
-    def _preprocess(self, audio: AudioData) -> Optional[np.ndarray]:
+    def _preprocess(self, audio: AudioData) -> np.ndarray | None:
         """预处理音频数据，将 AudioData 转换为模型所需的格式"""
         return convert_audio_format(
             audio=audio,
