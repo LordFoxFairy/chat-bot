@@ -15,15 +15,16 @@ import struct
 import math
 from pathlib import Path
 
+import pytest
+import numpy as np
+
 # 设置项目根目录
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 os.chdir(PROJECT_ROOT)
 sys.path.insert(0, str(PROJECT_ROOT))
 
-import numpy as np
 
-
-class TestReporter:
+class SystemTestReporter:
     """测试结果报告器"""
     def __init__(self):
         self.results = []
@@ -115,7 +116,7 @@ def load_test_audio() -> bytes:
     # 尝试加载真实的测试音频文件
     test_audio_paths = [
         PROJECT_ROOT / "backend" / "tests" / "fixtures" / "test_audio.wav",
-        PROJECT_ROOT / ".cache" / "test_audio.wav",
+        PROJECT_ROOT / "outputs" / "test_audio.wav",
     ]
 
     for path in test_audio_paths:
@@ -130,7 +131,15 @@ def load_test_audio() -> bytes:
     return audio
 
 
-async def test_asr_module(reporter: TestReporter):
+
+@pytest.fixture
+def reporter():
+    """创建测试报告器"""
+    return SystemTestReporter()
+
+
+@pytest.mark.asyncio
+async def test_asr_module(reporter: SystemTestReporter):
     """测试 ASR 模块"""
     reporter.section("ASR 模块测试 (FunASR SenseVoice)")
 
@@ -145,7 +154,7 @@ async def test_asr_module(reporter: TestReporter):
 
         # 测试适配器创建
         config = {
-            'model_dir': '.cache/models/asr/SenseVoiceSmall/iic/SenseVoiceSmall',
+            'model_dir': 'outputs/models/asr/SenseVoiceSmall/iic/SenseVoiceSmall',
             'device': 'cpu',
             'sample_rate': 16000,
             'channels': 1,
@@ -179,7 +188,8 @@ async def test_asr_module(reporter: TestReporter):
         reporter.test("ASR 测试", False, str(e))
 
 
-async def test_tts_module(reporter: TestReporter):
+@pytest.mark.asyncio
+async def test_tts_module(reporter: SystemTestReporter):
     """测试 TTS 模块"""
     reporter.section("TTS 模块测试 (Edge TTS)")
 
@@ -233,7 +243,8 @@ async def test_tts_module(reporter: TestReporter):
         reporter.test("TTS 测试", False, str(e))
 
 
-async def test_vad_module(reporter: TestReporter):
+@pytest.mark.asyncio
+async def test_vad_module(reporter: SystemTestReporter):
     """测试 VAD 模块"""
     reporter.section("VAD 模块测试 (Silero VAD)")
 
@@ -243,7 +254,7 @@ async def test_vad_module(reporter: TestReporter):
 
         # 测试适配器创建
         config = {
-            'model_repo_path': '.cache/models/vad/silero-vad',
+            'model_repo_path': 'outputs/models/vad/silero-vad',
             'model_name': 'silero_vad',
             'threshold': 0.5,
             'vad_sample_rate': 16000,
@@ -279,7 +290,8 @@ async def test_vad_module(reporter: TestReporter):
         reporter.test("VAD 测试", False, str(e))
 
 
-async def test_llm_module(reporter: TestReporter):
+@pytest.mark.asyncio
+async def test_llm_module(reporter: SystemTestReporter):
     """测试 LLM 模块"""
     reporter.section("LLM 模块测试 (LangChain)")
 
@@ -336,7 +348,8 @@ async def test_llm_module(reporter: TestReporter):
         reporter.test("LLM 测试", False, str(e))
 
 
-async def test_vad_asr_combination(reporter: TestReporter):
+@pytest.mark.asyncio
+async def test_vad_asr_combination(reporter: SystemTestReporter):
     """测试 VAD + ASR 组合"""
     reporter.section("组合测试: VAD + ASR")
 
@@ -351,7 +364,7 @@ async def test_vad_asr_combination(reporter: TestReporter):
 
         # 初始化 VAD
         vad_config = {
-            'model_repo_path': '.cache/models/vad/silero-vad',
+            'model_repo_path': 'outputs/models/vad/silero-vad',
             'threshold': 0.5,
             'vad_sample_rate': 16000,
             'window_size_samples': 512,
@@ -362,7 +375,7 @@ async def test_vad_asr_combination(reporter: TestReporter):
 
         # 初始化 ASR
         asr_config = {
-            'model_dir': '.cache/models/asr/SenseVoiceSmall/iic/SenseVoiceSmall',
+            'model_dir': 'outputs/models/asr/SenseVoiceSmall/iic/SenseVoiceSmall',
             'device': 'cpu',
             'sample_rate': 16000,
             'channels': 1,
@@ -397,7 +410,8 @@ async def test_vad_asr_combination(reporter: TestReporter):
         reporter.test("VAD+ASR 组合测试", False, str(e))
 
 
-async def test_llm_tts_combination(reporter: TestReporter):
+@pytest.mark.asyncio
+async def test_llm_tts_combination(reporter: SystemTestReporter):
     """测试 LLM + TTS 组合"""
     reporter.section("组合测试: LLM + TTS")
 
@@ -464,7 +478,8 @@ async def test_llm_tts_combination(reporter: TestReporter):
         reporter.test("LLM+TTS 组合测试", False, str(e))
 
 
-async def test_full_pipeline(reporter: TestReporter):
+@pytest.mark.asyncio
+async def test_full_pipeline(reporter: SystemTestReporter):
     """测试完整流水线: 音频 -> VAD -> ASR -> LLM -> TTS -> 音频"""
     reporter.section("端到端测试: 完整对话流水线")
 
@@ -486,7 +501,7 @@ async def test_full_pipeline(reporter: TestReporter):
 
         # 初始化所有模块
         vad = SileroVADAdapter('vad', {
-            'model_repo_path': '.cache/models/vad/silero-vad',
+            'model_repo_path': 'outputs/models/vad/silero-vad',
             'threshold': 0.5,
             'vad_sample_rate': 16000,
             'window_size_samples': 512,
@@ -494,7 +509,7 @@ async def test_full_pipeline(reporter: TestReporter):
         })
 
         asr = FunASRSenseVoiceAdapter('asr', {
-            'model_dir': '.cache/models/asr/SenseVoiceSmall/iic/SenseVoiceSmall',
+            'model_dir': 'outputs/models/asr/SenseVoiceSmall/iic/SenseVoiceSmall',
             'device': 'cpu',
             'sample_rate': 16000,
             'channels': 1,
@@ -582,7 +597,8 @@ async def test_full_pipeline(reporter: TestReporter):
         reporter.test("端到端测试", False, str(e))
 
 
-async def test_chat_engine(reporter: TestReporter):
+@pytest.mark.asyncio
+async def test_chat_engine(reporter: SystemTestReporter):
     """测试 ChatEngine 集成"""
     reporter.section("ChatEngine 集成测试")
 
@@ -651,7 +667,7 @@ async def main():
                         os.environ['API_KEY'] = line.split('=', 1)[1].strip()
                         break
 
-    reporter = TestReporter()
+    reporter = SystemTestReporter()
 
     # 1. 单模块测试
     await test_vad_module(reporter)

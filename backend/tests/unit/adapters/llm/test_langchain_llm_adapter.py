@@ -23,9 +23,11 @@ class TestLangChainLLMAdapterInitialization:
 
     def test_init_with_config_api_key(self, mock_config):
         """测试从配置中读取 API Key"""
-        adapter = LangChainLLMAdapter("llm_test", mock_config)
-        assert adapter.api_key == "test-api-key"
-        assert adapter.model_name == "gpt-3.5-turbo"
+        # 清除环境变量，确保使用配置中的 api_key
+        with patch.dict(os.environ, {}, clear=True):
+            adapter = LangChainLLMAdapter("llm_test", mock_config)
+            assert adapter.api_key == "test-api-key"
+            assert adapter.model_name == "gpt-3.5-turbo"
 
     def test_init_with_env_api_key(self, mock_config):
         """测试优先使用环境变量中的 API Key"""
@@ -79,20 +81,19 @@ class TestLangChainLLMAdapterInitialization:
         mock_init = MagicMock()
         mock_chat_models.init_chat_model = mock_init
 
-        with patch.dict("sys.modules", {"langchain.chat_models": mock_chat_models}):
-            adapter = LangChainLLMAdapter("llm_test", mock_config)
+        # 清除环境变量，确保使用配置中的 api_key
+        with patch.dict(os.environ, {}, clear=True):
+            with patch.dict("sys.modules", {"langchain.chat_models": mock_chat_models}):
+                adapter = LangChainLLMAdapter("llm_test", mock_config)
 
-            # 手动触发 _init_model
-            # 注意: 如果 adapter 内部没有重新 import，它会使用 cache。
-            # 但 _init_model 里确实做了 import。
+                # 手动触发 _init_model
+                adapter._init_model()
 
-            adapter._init_model()
-
-            mock_init.assert_called_once()
-            call_kwargs = mock_init.call_args[1]
-            assert call_kwargs["model"] == "gpt-3.5-turbo"
-            assert call_kwargs["api_key"] == "test-api-key"
-            assert call_kwargs["temperature"] == 0.7
+                mock_init.assert_called_once()
+                call_kwargs = mock_init.call_args[1]
+                assert call_kwargs["model"] == "gpt-3.5-turbo"
+                assert call_kwargs["api_key"] == "test-api-key"
+                assert call_kwargs["temperature"] == 0.7
 
     @pytest.mark.asyncio
     async def test_setup_success(self, mock_config):

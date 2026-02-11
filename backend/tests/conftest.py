@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from backend.core.app_context import AppContext
@@ -30,9 +30,9 @@ def session_manager():
 @pytest.fixture
 async def test_config():
     """加载 backend/configs/test_config.yaml 配置（如果存在）"""
-    config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "test_config.yaml")
-    if os.path.exists(config_path):
-        return await ConfigLoader.load_config(config_path)
+    config_path = Path(__file__).parent / ".." / "configs" / "test_config.yaml"
+    if config_path.exists():
+        return await ConfigLoader.load_config(str(config_path))
 
     # Return a default minimal valid config structure if file doesn't exist
     # This ensures tests depending on this fixture don't crash without the file
@@ -71,8 +71,8 @@ async def test_config():
                 "config": {}
             }
         },
-        "global_settings": {
-            "log_level": "DEBUG"
+        "logging": {
+            "level": "DEBUG"
         }
     }
 

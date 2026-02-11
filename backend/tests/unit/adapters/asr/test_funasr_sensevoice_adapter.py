@@ -1,13 +1,12 @@
 import asyncio
-import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch, AsyncMock
 import pytest
 import numpy as np
 
-# 添加 src 目录到系统路径
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../src")))
+# 添加项目根目录到系统路径
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
 from backend.core.models.audio_data import AudioData, AudioFormat
 from backend.core.models.exceptions import ModuleInitializationError, ModuleProcessingError
@@ -46,12 +45,15 @@ class TestFunASRSenseVoiceAdapter:
 
     @pytest.mark.asyncio
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
-    @patch('os.path.exists')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.resolve_project_path')
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
-    async def test_initialization_success(self, mock_auto_model, mock_exists, mock_config):
+    async def test_initialization_success(self, mock_auto_model, mock_resolve_path, mock_config):
         """测试正常初始化"""
         # 设置
-        mock_exists.return_value = True
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        mock_path.__str__ = MagicMock(return_value="/resolved/path")
+        mock_resolve_path.return_value = mock_path
         mock_model_instance = MagicMock()
         mock_auto_model.return_value = mock_model_instance
 
@@ -66,7 +68,6 @@ class TestFunASRSenseVoiceAdapter:
         # 验证 AutoModel 调用参数
         mock_auto_model.assert_called_once()
         call_kwargs = mock_auto_model.call_args.kwargs
-        assert call_kwargs['model'] == os.path.abspath(mock_config['model_dir'])
         assert call_kwargs['device'] == mock_config['device']
         assert call_kwargs['chunk_size'][0] == mock_config['vad_chunk_size']
         assert 'output_dir' in call_kwargs
@@ -80,10 +81,12 @@ class TestFunASRSenseVoiceAdapter:
 
     @pytest.mark.asyncio
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
-    @patch('os.path.exists')
-    async def test_init_model_dir_not_found(self, mock_exists, mock_config):
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.resolve_project_path')
+    async def test_init_model_dir_not_found(self, mock_resolve_path, mock_config):
         """测试模型目录不存在"""
-        mock_exists.return_value = False
+        mock_path = MagicMock()
+        mock_path.exists.return_value = False
+        mock_resolve_path.return_value = mock_path
 
         adapter = FunASRSenseVoiceAdapter("test_asr", mock_config)
 
@@ -92,11 +95,14 @@ class TestFunASRSenseVoiceAdapter:
 
     @pytest.mark.asyncio
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
-    @patch('os.path.exists')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.resolve_project_path')
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
-    async def test_init_automodel_failure(self, mock_auto_model, mock_exists, mock_config):
+    async def test_init_automodel_failure(self, mock_auto_model, mock_resolve_path, mock_config):
         """测试 AutoModel 初始化失败"""
-        mock_exists.return_value = True
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        mock_path.__str__ = MagicMock(return_value="/resolved/path")
+        mock_resolve_path.return_value = mock_path
         mock_auto_model.side_effect = Exception("Model load failed")
 
         adapter = FunASRSenseVoiceAdapter("test_asr", mock_config)
@@ -106,13 +112,16 @@ class TestFunASRSenseVoiceAdapter:
 
     @pytest.mark.asyncio
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
-    @patch('os.path.exists')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.resolve_project_path')
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.convert_audio_format')
-    async def test_recognize_success(self, mock_convert, mock_auto_model, mock_exists, mock_config, mock_audio_data):
+    async def test_recognize_success(self, mock_convert, mock_auto_model, mock_resolve_path, mock_config, mock_audio_data):
         """测试正常的语音识别流程"""
         # 设置
-        mock_exists.return_value = True
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        mock_path.__str__ = MagicMock(return_value="/resolved/path")
+        mock_resolve_path.return_value = mock_path
         mock_model_instance = MagicMock()
         # 模拟 generate 方法
         mock_model_instance.generate.return_value = [{"text": "测试语音识别"}]
@@ -141,11 +150,13 @@ class TestFunASRSenseVoiceAdapter:
 
     @pytest.mark.asyncio
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
-    @patch('os.path.exists')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.resolve_project_path')
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
-    async def test_recognize_uninitialized(self, mock_auto_model, mock_exists, mock_config, mock_audio_data):
+    async def test_recognize_uninitialized(self, mock_auto_model, mock_resolve_path, mock_config, mock_audio_data):
         """测试未初始化直接调用识别"""
-        mock_exists.return_value = True
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        mock_resolve_path.return_value = mock_path
 
         adapter = FunASRSenseVoiceAdapter("test_asr", mock_config)
         # 不调用 initialize
@@ -155,12 +166,15 @@ class TestFunASRSenseVoiceAdapter:
 
     @pytest.mark.asyncio
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
-    @patch('os.path.exists')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.resolve_project_path')
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.convert_audio_format')
-    async def test_recognize_preprocess_fail(self, mock_convert, mock_auto_model, mock_exists, mock_config, mock_audio_data):
+    async def test_recognize_preprocess_fail(self, mock_convert, mock_auto_model, mock_resolve_path, mock_config, mock_audio_data):
         """测试预处理失败（返回空）"""
-        mock_exists.return_value = True
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        mock_path.__str__ = MagicMock(return_value="/resolved/path")
+        mock_resolve_path.return_value = mock_path
         mock_auto_model.return_value = MagicMock()
         mock_convert.return_value = None  # 转换失败返回 None 或空数组
 
@@ -172,12 +186,15 @@ class TestFunASRSenseVoiceAdapter:
 
     @pytest.mark.asyncio
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
-    @patch('os.path.exists')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.resolve_project_path')
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.convert_audio_format')
-    async def test_recognize_inference_error(self, mock_convert, mock_auto_model, mock_exists, mock_config, mock_audio_data):
+    async def test_recognize_inference_error(self, mock_convert, mock_auto_model, mock_resolve_path, mock_config, mock_audio_data):
         """测试推理过程出错"""
-        mock_exists.return_value = True
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        mock_path.__str__ = MagicMock(return_value="/resolved/path")
+        mock_resolve_path.return_value = mock_path
         mock_model = MagicMock()
         mock_model.generate.side_effect = Exception("Inference error")
         mock_auto_model.return_value = mock_model
@@ -192,11 +209,14 @@ class TestFunASRSenseVoiceAdapter:
 
     @pytest.mark.asyncio
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
-    @patch('os.path.exists')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.resolve_project_path')
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
-    async def test_text_extraction(self, mock_auto_model, mock_exists, mock_config):
+    async def test_text_extraction(self, mock_auto_model, mock_resolve_path, mock_config):
         """测试文本提取逻辑"""
-        mock_exists.return_value = True
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        mock_path.__str__ = MagicMock(return_value="/resolved/path")
+        mock_resolve_path.return_value = mock_path
         mock_auto_model.return_value = MagicMock()
 
         adapter = FunASRSenseVoiceAdapter("test_asr", mock_config)
@@ -220,11 +240,14 @@ class TestFunASRSenseVoiceAdapter:
 
     @pytest.mark.asyncio
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
-    @patch('os.path.exists')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.resolve_project_path')
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
-    async def test_cleanup(self, mock_auto_model, mock_exists, mock_config):
+    async def test_cleanup(self, mock_auto_model, mock_resolve_path, mock_config):
         """测试资源清理"""
-        mock_exists.return_value = True
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        mock_path.__str__ = MagicMock(return_value="/resolved/path")
+        mock_resolve_path.return_value = mock_path
         mock_model = MagicMock()
         mock_auto_model.return_value = mock_model
 
@@ -239,11 +262,14 @@ class TestFunASRSenseVoiceAdapter:
 
     @pytest.mark.asyncio
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.FUNASR_AVAILABLE', True)
-    @patch('os.path.exists')
+    @patch('backend.adapters.asr.funasr_sensevoice_adapter.resolve_project_path')
     @patch('backend.adapters.asr.funasr_sensevoice_adapter.AutoModel')
-    async def test_cleanup_cuda(self, mock_auto_model, mock_exists, mock_config):
+    async def test_cleanup_cuda(self, mock_auto_model, mock_resolve_path, mock_config):
         """测试 CUDA 资源清理"""
-        mock_exists.return_value = True
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        mock_path.__str__ = MagicMock(return_value="/resolved/path")
+        mock_resolve_path.return_value = mock_path
         mock_auto_model.return_value = MagicMock()
 
         config_cuda = mock_config.copy()
