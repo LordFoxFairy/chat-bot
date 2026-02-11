@@ -40,5 +40,6 @@ modules:
         threshold: 0.5
         sample_rate: 16000
 
-global_settings:
-  log_level: "DEBUG"
+logging:
+  level: "DEBUG"
+  # 测试不写入文件，仅输出到控制台

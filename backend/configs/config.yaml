@@ -1,3 +1,11 @@
+# --- 日志配置 ---
+logging:
+  level: "INFO"                    # 日志级别 ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+  file_path: "logs/chat-bot.log"   # 日志文件路径，留空则只输出到控制台
+  max_bytes: 10485760              # 单个日志文件最大字节数 (10MB)
+  backup_count: 5                  # 保留的旧日志文件数量
+  json_format: false               # 是否使用 JSON 格式输出
+
 modules:
   asr: # 自动语音识别 (ASR) 模块
     enabled: true # 是否启用此模块
@@ -6,7 +14,7 @@ modules:
     adapter_type: "funasr_sensevoice"
     config: # 此模块的特定配置
       funasr_sensevoice:
-        model_dir: ".cache/models/asr/SenseVoiceSmall" # ASR 模型文件所在的目录路径
+        model_dir: "outputs/models/asr/SenseVoiceSmall/iic/SenseVoiceSmall" # ASR 模型文件所在的目录路径
         # 请确保此路径相对于项目根目录是正确的
         device: "cpu" # 指定运行模型的设备 ("cpu" 或 "cuda" 如果GPU可用且已配置)
         sample_rate: 16000 # ASR 期望的输入音频采样率 (例如 16000 Hz)
@@ -26,14 +34,11 @@ modules:
     system_prompt: "你是一个非常乐于助人的AI智能助手，请用友善和专业的语气回答问题。"
 
     config:
-      # 默认配置 - 使用统一的 API_KEY 环境变量
-      # init_chat_model 会根据 model_name 自动选择正确的客户端
+      # 默认配置 - 使用 OpenRouter API
       default:
-        model_name: "claude-sonnet-4-20250514"  # 自动检测为 Anthropic
-        # model_name: "gpt-4"                   # 自动检测为 OpenAI
-        # model_name: "anthropic/claude-3-opus" # 带 base_url 使用 OpenAI 兼容
-        api_key_env_var: "API_KEY"              # 统一使用 API_KEY 环境变量
-        # base_url: "https://openrouter.ai/api/v1"  # 可选，用于自定义端点
+        model_name: "anthropic/claude-3.5-sonnet"  # OpenRouter 模型名称
+        api_key_env_var: "API_KEY"                 # 使用 API_KEY 环境变量
+        base_url: "https://openrouter.ai/api/v1"  # OpenRouter 端点
         temperature: 0.7
         max_tokens: 4096
 
@@ -41,15 +46,15 @@ modules:
     enabled: true               # 是否啟用此 TTS 模塊
     module_category: "tts"      # 模塊類別，用於工廠模式
     adapter_type: "edge_tts"    # 指定要使用的 TTS 適配器類型
-    save_generated_audio: true
-    audio_save_path: "outputs/tts_audio/"
     config:
       edge_tts:
         voice: "zh-CN-XiaoxiaoNeural"
         rate: "+0%"
         volume: "+0%"
-        output_audio_format: "wav"
+        output_audio_format: "mp3"  # Edge TTS 原生输出 MP3 格式
         sample_rate: 16000
+        save_generated_audio: false            # 是否保存生成的音频文件
+        audio_save_path: "outputs/tts_audio"  # 音频文件保存路径
 
 
   vad: # 语音活动检测 (VAD) 模块
@@ -58,27 +63,30 @@ modules:
     adapter_type: "silero_vad"
     config:
       silero_vad:
-        model_repo_path: ".cache/models/vad/silero-vad"
+        model_repo_path: "outputs/models/vad/silero-vad"
         model_name: "silero_vad"
-        threshold: 0.5
+        threshold: 0.65  # 提高阈值以过滤背景噪声 (原值 0.5)
         vad_sample_rate: 16000
         # min_silence_duration_ms: 100 # 这个是VAD内部参数，ChatEngine用下面那个
-        min_silence_duration_ms_eos: 1200 # ChatEngine判断语句结束的静默阈值 (ms)
-        max_speech_segment_duration_ms: 5000 # 新增：最长语音段持续时间 (ms)，超过则强制ASR
+        min_silence_duration_ms_eos: 1500 # ChatEngine判断语句结束的静默阈值 (ms)，增加以避免误触发
+        max_speech_segment_duration_ms: 4000 # 最长语音段持续时间 (ms)，缩短以减少噪声累积
         window_size_samples: 512 # VAD处理窗口大小（样本数），例如 Silero VAD 16kHz下是512
         device: "cpu"
 
-  handlers:
+  protocols:
+    enabled: true
+    module_category: "protocol"
     adapter_type: "websocket"
-    websocket:
-      host: "0.0.0.0"
-      port: 8765
-      websocket_max_message_size: 2097152 # WebSocket 消息的最大大小 (字节, 例如 2MB，以容纳更大的音频块)
+    config:
+      websocket:
+        host: "0.0.0.0"
+        port: 8765
+        websocket_max_message_size: 2097152 # WebSocket 消息的最大大小 (字节, 例如 2MB，以容纳更大的音频块)
 
 
-# --- 全局应用设置 ---
-global_settings:
-  log_level: "INFO" # 应用的全局日志级别 ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+# --- 全局应用设置 (已废弃，请使用顶层 logging 配置) ---
+# global_settings:
+#   log_level: "INFO"  # 已移动到 logging.level
 
 # --- 提示词激活功能设置 ---
 activation_settings:
