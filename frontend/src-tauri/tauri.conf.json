@@ -40,9 +40,6 @@
       "icons/icon.ico"
     ],
     "resources": [],
-    "externalBin": [
-      "binaries/python-server"
-    ],
     "category": "Utility",
     "shortDescription": "AI Voice Chat Bot",
     "longDescription": "A desktop application for voice chat with AI assistant",
@@ -68,14 +65,7 @@
   },
   "plugins": {
     "shell": {
-      "open": true,
-      "scope": [
-        {
-          "name": "python-server",
-          "cmd": "binaries/python-server",
-          "args": true
-        }
-      ]
+      "open": true
     }
   }
 }

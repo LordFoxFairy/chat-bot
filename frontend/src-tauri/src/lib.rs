@@ -15,10 +15,10 @@ fn start_python_server(state: tauri::State<PythonProcess>) -> Result<String, Str
         return Ok("Python server already running".to_string());
     }
 
-    // In development, start from project root
+    // In development, start from project root using the chatbot module
     #[cfg(debug_assertions)]
     let child = Command::new("python3")
-        .arg("app.py")
+        .args(["-m", "backend.main", "server"])
         .current_dir("../..")
         .spawn()
         .map_err(|e| format!("Failed to start Python server: {}", e))?;
@@ -91,12 +91,14 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // Auto-start Python server in development
-            #[cfg(debug_assertions)]
-            {
-                let state = app.state::<PythonProcess>();
-                let _ = start_python_server(state);
-            }
+            // Note: In dev mode with `chatbot dev`, Python server is started by shell script
+            // Auto-start is disabled to avoid duplicate processes
+            // Uncomment below if running Tauri standalone without the shell script
+            // #[cfg(debug_assertions)]
+            // {
+            //     let state = app.state::<PythonProcess>();
+            //     let _ = start_python_server(state);
+            // }
 
             Ok(())
         })
