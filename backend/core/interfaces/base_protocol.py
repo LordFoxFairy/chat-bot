@@ -34,12 +34,14 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
         self,
         module_id: str,
         config: Dict[str, Any],
-        conversation_manager: 'ConversationManager'
+        conversation_manager: 'ConversationManager',
+        module_provider: Optional[ModuleProvider] = None
     ):
         super().__init__(module_id, config)
 
         # ConversationManager 引用
         self.conversation_manager = conversation_manager
+        self._module_provider = module_provider
 
         # 读取协议通用配置
         self.host = self.config.get("host", "0.0.0.0")
@@ -55,33 +57,36 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
         logger.debug(f"  - port: {self.port}")
 
     @abstractmethod
-    async def start(self):
+    async def start(self) -> None:
         """启动协议服务"""
         raise NotImplementedError("Protocol 子类必须实现 start 方法")
 
     @abstractmethod
-    async def stop(self):
+    async def stop(self) -> None:
         """停止协议服务"""
         raise NotImplementedError("Protocol 子类必须实现 stop 方法")
 
-    async def _setup_impl(self):
+    async def _setup_impl(self) -> None:
         """初始化逻辑（默认为空，子类可覆盖）"""
         pass
 
     def _get_module_provider(self) -> ModuleProvider:
         """获取模块提供者
 
-        默认使用 AppContext，子类可覆盖以支持依赖注入。
+        如果提供了 module_provider，使用它；否则回退到 AppContext。
 
         Returns:
             模块提供者函数
         """
+        if self._module_provider:
+            return self._module_provider
+
         from backend.core.app_context import AppContext
         return AppContext.get_module
 
     # ==================== 通用协议消息处理 ====================
 
-    async def handle_text_message(self, connection: ConnectionT, raw_message: str):
+    async def handle_text_message(self, connection: ConnectionT, raw_message: str) -> None:
         """处理文本消息（通用方法）"""
         try:
             if not raw_message.strip().startswith('{'):
@@ -92,6 +97,12 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
             # 判断是否为注册消息
             if stream_event.event_type == EventType.SYSTEM_CLIENT_SESSION_START:
                 await self._handle_register(connection, stream_event)
+            elif stream_event.event_type == EventType.CONFIG_GET:
+                await self._handle_config_get(connection, stream_event)
+            elif stream_event.event_type == EventType.CONFIG_SET:
+                await self._handle_config_set(connection, stream_event)
+            elif stream_event.event_type == EventType.MODULE_STATUS_GET:
+                await self._handle_module_status_get(connection, stream_event)
             else:
                 # 路由到 ConversationHandler
                 await self._route_message(connection, stream_event)
@@ -99,7 +110,7 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
         except Exception as e:
             logger.error(f"Protocol [{self.module_id}] 消息处理失败: {e}", exc_info=True)
 
-    async def _handle_register(self, connection: ConnectionT, stream_event: StreamEvent):
+    async def _handle_register(self, connection: ConnectionT, stream_event: StreamEvent) -> None:
         """处理注册消息（通用方法）"""
         from backend.core.session.session_context import SessionContext
 
@@ -134,7 +145,161 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
 
         logger.info(f"Protocol [{self.module_id}] 客户端已注册: tag={tag_id}, session={session_id}")
 
-    async def _route_message(self, connection: ConnectionT, stream_event: StreamEvent):
+    async def _handle_config_get(self, connection: ConnectionT, stream_event: StreamEvent) -> None:
+        """处理获取配置请求"""
+        from backend.utils.config_manager import get_config_manager
+
+        try:
+            # 从 event_data 中获取 section 参数（如果有）
+            section = None
+            if isinstance(stream_event.event_data, dict):
+                section = stream_event.event_data.get("section")
+
+            # 使用配置管理器获取配置（自动掩码敏感信息）
+            config_manager = get_config_manager("backend/configs/config.yaml")
+            config_data = await config_manager.get_config(
+                section=section,
+                mask_sensitive=True
+            )
+
+            # 发送 CONFIG_SNAPSHOT
+            response = StreamEvent(
+                event_type=EventType.CONFIG_SNAPSHOT,
+                event_data=config_data.content,
+                tag_id=stream_event.tag_id,
+                session_id=stream_event.session_id
+            )
+
+            # 如果已经有 session_id，直接发送到 session
+            # 如果是刚建立连接还没 session，暂时直接回发给连接
+            if stream_event.session_id:
+                await self.send_event(stream_event.session_id, response)
+            else:
+                await self.send_message(connection, response.to_json())
+
+        except Exception as e:
+            logger.error(f"处理 CONFIG_GET 失败: {e}", exc_info=True)
+            # 发送错误响应
+            error_response = StreamEvent.create_error_event(
+                f"Failed to get config: {str(e)}"
+            )
+            await self.send_message(connection, error_response.to_json())
+
+    async def _handle_config_set(self, connection: ConnectionT, stream_event: StreamEvent) -> None:
+        """处理设置配置请求"""
+        import json
+        from backend.utils.config_manager import get_config_manager, unmask_sensitive_fields
+
+        try:
+            # 获取新配置数据
+            new_config = stream_event.event_data
+            if hasattr(new_config, 'model_dump'):
+                new_config = new_config.model_dump()
+            elif hasattr(new_config, 'dict'):
+                new_config = new_config.dict()
+
+            if not isinstance(new_config, dict):
+                # 如果 event_data 是 TextData 或其他类型，尝试解析
+                if hasattr(stream_event.event_data, 'text') and stream_event.event_data.text:
+                    try:
+                        new_config = json.loads(stream_event.event_data.text)
+                    except json.JSONDecodeError:
+                        pass
+
+            if not isinstance(new_config, dict):
+                raise ValueError("Valid configuration dictionary required")
+
+            # 从 event_data 中获取 section 参数（如果有）
+            section = new_config.pop("_section", None)
+
+            # 使用配置管理器更新配置
+            config_manager = get_config_manager("backend/configs/config.yaml")
+
+            # 获取原始配置（用于还原掩码的敏感字段）
+            original_config = await config_manager.get_config(
+                section=section,
+                mask_sensitive=False
+            )
+
+            # 还原掩码的敏感字段（如果用户没有修改）
+            new_config = unmask_sensitive_fields(new_config, original_config.content)
+
+            # 更新配置
+            updated_config = await config_manager.update_config(
+                updates=new_config,
+                section=section,
+                validate=True
+            )
+
+            logger.info("Configuration updated via UI.")
+
+            # 发送成功通知 - 返回更新后的配置快照
+            response = StreamEvent(
+                event_type=EventType.CONFIG_SNAPSHOT,
+                event_data=updated_config.content,
+                tag_id=stream_event.tag_id,
+                session_id=stream_event.session_id
+            )
+
+            if stream_event.session_id:
+                await self.send_event(stream_event.session_id, response)
+            else:
+                await self.send_message(connection, response.to_json())
+
+        except Exception as e:
+            logger.error(f"处理 CONFIG_SET 失败: {e}", exc_info=True)
+            # 发送错误响应
+            error_response = StreamEvent.create_error_event(
+                f"Failed to save config: {str(e)}"
+            )
+            await self.send_message(connection, error_response.to_json())
+
+    async def _handle_module_status_get(self, connection: ConnectionT, stream_event: StreamEvent) -> None:
+        """处理获取模块状态请求"""
+
+        try:
+            # 收集所有模块状态
+            status_report = {}
+
+            # 尝试获取几个核心模块的状态
+            modules_to_check = ['asr', 'vad', 'llm', 'tts']
+            get_module = self._get_module_provider()
+
+            for module_type in modules_to_check:
+                module = get_module(module_type)
+                if module:
+                    status_report[module_type] = {
+                        "status": "running",
+                        "module_id": module.module_id,
+                        "module_type": module.__class__.__name__,
+                        "initialized": getattr(module, '_initialized', False),
+                    }
+                else:
+                    status_report[module_type] = {
+                        "status": "stopped",
+                        "error": "Not loaded"
+                    }
+
+            response = StreamEvent(
+                event_type=EventType.MODULE_STATUS_REPORT,
+                event_data=status_report,
+                tag_id=stream_event.tag_id,
+                session_id=stream_event.session_id
+            )
+
+            if stream_event.session_id:
+                await self.send_event(stream_event.session_id, response)
+            else:
+                await self.send_message(connection, response.to_json())
+
+        except Exception as e:
+            logger.error(f"处理 MODULE_STATUS_GET 失败: {e}", exc_info=True)
+            error_response = StreamEvent.create_error_event(
+                f"Failed to get module status: {str(e)}"
+            )
+            await self.send_message(connection, error_response.to_json())
+
+    async def _route_message(self, connection: ConnectionT, stream_event: StreamEvent) -> None:
         """路由消息到 ConversationHandler（通用方法）"""
         session_id = self.get_session_id(connection)
         if not session_id:
@@ -155,7 +320,7 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
             text_data: TextData = stream_event.event_data
             await handler.handle_text_input(text_data.text)
 
-    async def handle_audio_message(self, connection: ConnectionT, audio_data: bytes):
+    async def handle_audio_message(self, connection: ConnectionT, audio_data: bytes) -> None:
         """处理音频消息（通用方法）"""
         session_id = self.get_session_id(connection)
         if not session_id:
@@ -165,7 +330,7 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
         if handler:
             await handler.handle_audio(audio_data)
 
-    async def handle_disconnect(self, connection: ConnectionT):
+    async def handle_disconnect(self, connection: ConnectionT) -> None:
         """处理断开连接（通用方法）"""
         session_id = self.remove_session_by_connection(connection)
         if session_id:
@@ -204,7 +369,7 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
         """通过会话 ID 获取连接"""
         return self.session_to_connection.get(session_id)
 
-    def remove_session(self, session_id: str):
+    def remove_session(self, session_id: str) -> None:
         """移除会话映射"""
         connection = self.session_to_connection.pop(session_id, None)
         if connection:
@@ -223,7 +388,7 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
             f"Protocol [{self.module_id}] 移除会话: {session_id}"
         )
 
-    def remove_session_by_connection(self, connection: ConnectionT):
+    def remove_session_by_connection(self, connection: ConnectionT) -> Optional[str]:
         """通过连接移除会话"""
         session_id = self.connection_to_session.pop(connection, None)
         if session_id:
@@ -244,7 +409,7 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
 
         return session_id
 
-    def clear_all_sessions(self):
+    def clear_all_sessions(self) -> None:
         """清理所有会话映射"""
         logger.debug(f"Protocol [{self.module_id}] 清理所有会话映射")
         self.tag_to_session.clear()
@@ -254,7 +419,7 @@ class BaseProtocol(BaseModule, Generic[ConnectionT]):
     # ==================== 消息发送 ====================
 
     @abstractmethod
-    async def send_message(self, connection: ConnectionT, message: str):
+    async def send_message(self, connection: ConnectionT, message: str) -> None:
         """发送消息到连接（子类实现具体传输逻辑）"""
         raise NotImplementedError("Protocol 子类必须实现 send_message 方法")
 

@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 from backend.core.interfaces.base_module import BaseModule
 from backend.core.interfaces.base_protocol import BaseProtocol
 from backend.core.session.session_manager import SessionManager
+from backend.core.di.container import Container
 from backend.utils.logging_setup import logger
 from backend.utils.module_initialization_utils import initialize_single_module_instance
 
@@ -56,6 +57,16 @@ class ChatEngine:
         # 会话管理器
         from backend.core.session.conversation_manager import ConversationManager
         self.conversation_manager = ConversationManager(session_manager=session_manager)
+
+        # 依赖注入容器
+        self.container = Container()
+        # 注册核心组件
+        self.container.register("config", config)
+        self.container.register(SessionManager, session_manager)
+        self.container.register(ConversationManager, self.conversation_manager)
+        if adapter_loader:
+             # 注册 adapter_loader，使用字符串键因为类型可能未在运行时导入
+             self.container.register("adapter_loader", adapter_loader)
 
         logger.info("ChatEngine 初始化完成")
 
@@ -113,11 +124,42 @@ class ChatEngine:
             from backend.core.app_context import AppContext
             AppContext.set_modules(self.common_modules)
 
+            # 注册模块到容器
+            self._register_modules_to_container()
+
             logger.info("ChatEngine 模块初始化完成")
 
         except Exception as e:
             logger.critical(f"ChatEngine 模块加载失败: {e}", exc_info=True)
             raise
+
+    def _register_modules_to_container(self) -> None:
+        """注册所有模块到依赖注入容器"""
+        # 1. 注册通用模块
+        for module_id, module in self.common_modules.items():
+            # 按 ID 注册
+            self.container.register(module_id, module)
+            # 按具体类型注册
+            self.container.register(type(module), module)
+
+            # 如果是特定类型的模块，也可以注册其基类接口
+            # 例如：所有继承自 BaseModule 的
+            if isinstance(module, BaseModule):
+                # 这里可以考虑是否注册 BaseModule 接口，但通常我们会 resolve 具体接口
+                pass
+
+        # 2. 注册协议模块
+        for protocol_id, protocol in self.protocol_modules.items():
+            self.container.register(protocol_id, protocol)
+            self.container.register(type(protocol), protocol)
+
+    def get_container(self) -> Container:
+        """获取依赖注入容器
+
+        Returns:
+            Container: 依赖注入容器实例
+        """
+        return self.container
 
     def get_module(self, module_name: str) -> Optional[BaseModule]:
         """获取模块实例"""
@@ -169,3 +211,45 @@ class ChatEngine:
                 }
 
         return result
+
+    def get_module_status(self) -> Dict[str, Any]:
+        """获取所有模块的状态信息
+
+        Returns:
+            包含所有模块状态的字典
+        """
+        from backend.core.models.config_data import ModuleStatusData
+
+        status_report: Dict[str, Any] = {}
+
+        # 收集通用模块状态
+        for module_id, module in self.common_modules.items():
+            try:
+                status_report[module_id] = {
+                    "status": "running",
+                    "module_id": module.module_id,
+                    "module_type": module.__class__.__name__,
+                    "initialized": module._initialized,
+                }
+            except Exception as e:
+                status_report[module_id] = {
+                    "status": "error",
+                    "error": str(e),
+                }
+
+        # 收集协议模块状态
+        for protocol_id, protocol in self.protocol_modules.items():
+            try:
+                status_report[protocol_id] = {
+                    "status": "running",
+                    "module_id": protocol.module_id,
+                    "module_type": protocol.__class__.__name__,
+                    "initialized": protocol._initialized,
+                }
+            except Exception as e:
+                status_report[protocol_id] = {
+                    "status": "error",
+                    "error": str(e),
+                }
+
+        return status_report

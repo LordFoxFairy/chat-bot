@@ -52,9 +52,14 @@ class BaseModule(ABC):
         return self._is_ready
 
     @property
+    def module_type(self) -> str:
+        """模块类型（从类名推断，移除 Adapter 后缀）"""
+        return self.__class__.__name__.replace("Adapter", "")
+
+    @property
     def _log_prefix(self) -> str:
-        """日志前缀，包含模块类名和 ID"""
-        return f"{self.__class__.__name__} [{self.module_id}]"
+        """日志前缀，统一格式 [ModuleType/ModuleID]"""
+        return f"[{self.module_type}/{self.module_id}]"
 
     # ==================== 日志辅助方法 ====================
 
@@ -70,12 +75,12 @@ class BaseModule(ABC):
         """记录 WARNING 级别日志"""
         logger.warning(f"{self._log_prefix} {message}")
 
-    def log_error(self, message: str, exc_info: bool = True) -> None:
+    def log_error(self, message: str, exc_info: bool = False) -> None:
         """记录 ERROR 级别日志
 
         Args:
             message: 日志消息
-            exc_info: 是否包含异常堆栈信息（默认 True）
+            exc_info: 是否包含异常堆栈信息（默认 False）
         """
         logger.error(f"{self._log_prefix} {message}", exc_info=exc_info)
 
@@ -98,9 +103,11 @@ class BaseModule(ABC):
             message: 日志消息
             exc_info: 是否包含异常堆栈信息
         """
-        full_message = f"{self._log_prefix} (Session: {session_id}) {message}"
-        log_func = getattr(logger, level, logger.info)
-        log_func(full_message, exc_info=exc_info)
+        full_message = f"{self._log_prefix} [Session:{session_id}] {message}"
+
+        # 使用本地方法记录，避免重复添加前缀
+        logger_func = getattr(logger, level.lower(), logger.info)
+        logger_func(full_message, exc_info=exc_info)
 
     # ==================== 配置辅助方法 ====================
 
