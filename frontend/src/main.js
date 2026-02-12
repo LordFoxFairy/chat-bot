@@ -25,6 +25,11 @@ let reconnectTimer = null;
 let currentBotMessage = null;
 let audioQueue = [];
 let isPlayingAudio = false;
+let audioPlaybackTime = 0;  // 下一个音频块应该开始播放的时间
+let audioBufferQueue = [];  // 预解码的 AudioBuffer 队列
+let isDecodingAudio = false;
+const AUDIO_SCHEDULE_AHEAD = 0.1;  // 提前调度时间（秒）
+const MIN_BUFFER_COUNT = 2;  // 最小预缓冲数量
 
 // DOM Elements
 const statusIndicator = document.getElementById('status-indicator');
@@ -181,7 +186,7 @@ function handleAudioResponse(data) {
         // Base64 encoded audio
         const audioBytes = base64ToArrayBuffer(data.data);
         audioQueue.push(audioBytes);
-        playNextAudio();
+        processAudioQueue();
     }
 }
 
@@ -204,10 +209,131 @@ function handleASRUpdate(data) {
 
 function handleAudioData(arrayBuffer) {
     audioQueue.push(arrayBuffer);
-    playNextAudio();
+    processAudioQueue();
 }
 
-// Audio Playback
+// Audio Playback - 无缝播放实现
+async function processAudioQueue() {
+    // 启动解码流程
+    if (!isDecodingAudio && audioQueue.length > 0) {
+        decodeNextAudio();
+    }
+
+    // 启动播放流程
+    if (!isPlayingAudio && audioBufferQueue.length >= MIN_BUFFER_COUNT) {
+        startScheduledPlayback();
+    } else if (!isPlayingAudio && audioBufferQueue.length > 0 && audioQueue.length === 0) {
+        // 队列中没有更多数据，播放剩余的
+        startScheduledPlayback();
+    }
+}
+
+async function decodeNextAudio() {
+    if (isDecodingAudio || audioQueue.length === 0) return;
+
+    isDecodingAudio = true;
+
+    try {
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                sampleRate: CONFIG.audioSampleRate
+            });
+        }
+
+        while (audioQueue.length > 0) {
+            const audioData = audioQueue.shift();
+
+            try {
+                const audioBuffer = await decodeAudioData(audioData);
+                if (audioBuffer && audioBuffer.length > 0) {
+                    audioBufferQueue.push(audioBuffer);
+
+                    // 如果有足够的缓冲，开始播放
+                    if (!isPlayingAudio && audioBufferQueue.length >= MIN_BUFFER_COUNT) {
+                        startScheduledPlayback();
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to decode audio chunk:', error);
+            }
+        }
+    } finally {
+        isDecodingAudio = false;
+    }
+
+    // 检查是否还有新数据需要解码
+    if (audioQueue.length > 0) {
+        processAudioQueue();
+    }
+}
+
+function startScheduledPlayback() {
+    if (isPlayingAudio || audioBufferQueue.length === 0) return;
+
+    isPlayingAudio = true;
+
+    // 确保 AudioContext 处于运行状态
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
+
+    // 重置播放时间
+    audioPlaybackTime = audioContext.currentTime + AUDIO_SCHEDULE_AHEAD;
+
+    scheduleNextBuffer();
+}
+
+function scheduleNextBuffer() {
+    if (audioBufferQueue.length === 0) {
+        // 没有更多缓冲，等待新数据或结束
+        if (audioQueue.length === 0) {
+            // 真正结束
+            isPlayingAudio = false;
+        } else {
+            // 等待更多数据解码
+            setTimeout(() => {
+                if (audioBufferQueue.length > 0) {
+                    scheduleNextBuffer();
+                } else if (audioQueue.length === 0) {
+                    isPlayingAudio = false;
+                }
+            }, 50);
+        }
+        return;
+    }
+
+    const audioBuffer = audioBufferQueue.shift();
+
+    try {
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+
+        // 计算播放开始时间
+        const startTime = Math.max(audioPlaybackTime, audioContext.currentTime);
+
+        source.onended = () => {
+            // 继续调度下一个
+            scheduleNextBuffer();
+        };
+
+        source.start(startTime);
+
+        // 更新下一个音频块的开始时间
+        audioPlaybackTime = startTime + audioBuffer.duration;
+
+        // 继续解码更多数据
+        if (audioQueue.length > 0 && !isDecodingAudio) {
+            decodeNextAudio();
+        }
+
+    } catch (error) {
+        console.error('Audio scheduling error:', error);
+        isPlayingAudio = false;
+    }
+}
+
+// 旧的播放函数保留作为备用
 async function playNextAudio() {
     if (isPlayingAudio || audioQueue.length === 0) return;
 
@@ -294,8 +420,23 @@ function pcmToAudioBuffer(arrayBuffer) {
     return audioBuffer;
 }
 
+/**
+ * 清除所有待播放的音频（用于打断场景）
+ */
+function clearAudioQueue() {
+    audioQueue = [];
+    audioBufferQueue = [];
+    isPlayingAudio = false;
+    isDecodingAudio = false;
+    audioPlaybackTime = 0;
+    console.log('Audio queue cleared');
+}
+
 // Audio Recording
 async function startRecording() {
+    // 清除正在播放的音频（打断效果）
+    clearAudioQueue();
+
     try {
         mediaStream = await navigator.mediaDevices.getUserMedia({
             audio: {
@@ -375,6 +516,9 @@ function sendTextMessage(text) {
         addErrorMessage('Not connected to server');
         return;
     }
+
+    // 清除正在播放的音频（打断效果）
+    clearAudioQueue();
 
     addMessage(text, 'user');
     sendEvent('CLIENT_TEXT_INPUT', {
