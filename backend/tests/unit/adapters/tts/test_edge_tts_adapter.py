@@ -79,8 +79,8 @@ async def test_setup_success(adapter, mock_edge_tts_available):
     assert adapter.is_ready
 
 @pytest.mark.asyncio
-async def test_setup_timeout(adapter, mock_edge_tts_available):
-    """测试初始化连接超时"""
+async def test_setup_timeout_non_fatal(adapter, mock_edge_tts_available):
+    """测试初始化连接超时（非致命，只记录警告）"""
     # 模拟 asyncio.timeout 抛出 TimeoutError
 
     # 定义一个同步函数来返回上下文管理器
@@ -94,16 +94,20 @@ async def test_setup_timeout(adapter, mock_edge_tts_available):
          return TimeoutContext()
 
     with patch("asyncio.timeout", side_effect=mock_timeout):
-        with pytest.raises(ModuleInitializationError, match="EdgeTTS 初始化超时"):
-            await adapter.setup()
+        # 新行为：超时不会抛出异常，而是记录警告并标记为就绪
+        await adapter.setup()
+        # 适配器仍应标记为就绪，以便在首次请求时重试
+        assert adapter.is_ready
 
 @pytest.mark.asyncio
-async def test_setup_failure(adapter, mock_edge_tts_available):
-    """测试初始化连接失败（其他异常）"""
+async def test_setup_failure_non_fatal(adapter, mock_edge_tts_available):
+    """测试初始化连接失败（非致命，只记录警告）"""
     mock_edge_tts_available.Communicate.side_effect = Exception("Connection refused")
 
-    with pytest.raises(ModuleInitializationError, match="EdgeTTS 初始化失败"):
-        await adapter.setup()
+    # 新行为：连接失败不会抛出异常，而是记录警告
+    await adapter.setup()
+    # 适配器仍应标记为就绪，以便在首次请求时重试
+    assert adapter.is_ready
 
 @pytest.mark.asyncio
 async def test_synthesize_stream(adapter, mock_edge_tts_available):
@@ -187,9 +191,11 @@ async def test_synthesize_stream_empty_text(adapter, mock_edge_tts_available):
     mock_edge_tts_available.Communicate.assert_not_called()
 
 @pytest.mark.asyncio
-async def test_synthesize_stream_error(adapter, mock_edge_tts_available):
-    """测试合成过程中的错误处理"""
+async def test_synthesize_stream_error_after_retries(adapter, mock_edge_tts_available):
+    """测试合成过程中错误处理 - 重试耗尽后抛出异常"""
     adapter._is_ready = True
+    adapter.max_retries = 3
+    adapter.retry_delay = 0.01  # 快速重试以加快测试
 
     mock_communicate = MagicMock()
     mock_communicate.stream.side_effect = Exception("API Error")
@@ -200,6 +206,50 @@ async def test_synthesize_stream_error(adapter, mock_edge_tts_available):
     with pytest.raises(ModuleProcessingError, match="合成失败"):
         async for _ in adapter.synthesize_stream(text_data):
             pass
+
+    # 验证重试了 max_retries 次
+    assert mock_edge_tts_available.Communicate.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_synthesize_stream_retry_success(adapter, mock_edge_tts_available):
+    """测试重试机制 - 第一次失败，第二次成功"""
+    adapter._is_ready = True
+    adapter.max_retries = 3
+    adapter.retry_delay = 0.01
+
+    call_count = 0
+
+    def mock_communicate_factory(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        mock_comm = MagicMock()
+
+        if call_count == 1:
+            # 第一次调用失败
+            mock_comm.stream.side_effect = Exception("Temporary error")
+        else:
+            # 第二次及之后成功
+            async def success_stream():
+                yield {"type": "audio", "data": b"retry_success"}
+
+            mock_comm.stream.return_value = success_stream()
+
+        return mock_comm
+
+    mock_edge_tts_available.Communicate.side_effect = mock_communicate_factory
+
+    text_data = TextData(text="Retry test")
+
+    chunks = []
+    async for chunk in adapter.synthesize_stream(text_data):
+        chunks.append(chunk)
+
+    # 验证成功获取到数据
+    assert len(chunks) >= 1
+    assert any(chunk.data == b"retry_success" for chunk in chunks)
+    # 验证调用了 2 次（第一次失败，第二次成功）
+    assert call_count == 2
 
 @pytest.mark.asyncio
 async def test_metadata_integrity(adapter, mock_edge_tts_available):

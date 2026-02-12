@@ -31,6 +31,8 @@ class EdgeTTSAdapter(BaseTTS):
     DEFAULT_RATE = "+0%"
     DEFAULT_VOLUME = "+0%"
     DEFAULT_PITCH = "+0Hz"
+    DEFAULT_MAX_RETRIES = 3
+    DEFAULT_RETRY_DELAY = 1.0
 
     def __init__(
         self,
@@ -46,6 +48,8 @@ class EdgeTTSAdapter(BaseTTS):
         self.rate: str = self.config.get("rate", self.DEFAULT_RATE)
         self.volume: str = self.config.get("volume", self.DEFAULT_VOLUME)
         self.pitch: str = self.config.get("pitch", self.DEFAULT_PITCH)
+        self.max_retries: int = self.config.get("max_retries", self.DEFAULT_MAX_RETRIES)
+        self.retry_delay: float = self.config.get("retry_delay", self.DEFAULT_RETRY_DELAY)
         self.output_format: AudioFormat = AudioFormat.MP3  # EdgeTTS 输出 MP3
 
         # 音频保存配置
@@ -73,93 +77,117 @@ class EdgeTTSAdapter(BaseTTS):
                 logger.info(f"TTS/EdgeTTS [{self.module_id}] 音频保存目录已创建: {self.save_path}")
 
             # 测试连接（带超时控制）
-            async with asyncio.timeout(10.0):  # 10秒超时
-                communicate = edge_tts.Communicate("测试", self.voice)
-                async for chunk in communicate.stream():
-                    if chunk["type"] == "audio" and chunk["data"]:
-                        logger.info(f"TTS/EdgeTTS [{self.module_id}] 连接测试成功")
-                        break
+            # 注意：这里改为弱检查，失败不抛出异常，只记录警告
+            # 这样可以在离线或网络不稳定时启动服务，依靠后续的重试机制
+            try:
+                async with asyncio.timeout(10.0):  # 10秒超时
+                    communicate = edge_tts.Communicate("测试", self.voice)
+                    async for chunk in communicate.stream():
+                        if chunk["type"] == "audio" and chunk["data"]:
+                            logger.info(f"TTS/EdgeTTS [{self.module_id}] 连接测试成功")
+                            break
+            except Exception as e:
+                logger.warning(f"TTS/EdgeTTS [{self.module_id}] 连接测试失败（非致命）: {e}")
+                logger.warning(f"TTS/EdgeTTS [{self.module_id}] 服务将在首次请求时重试连接")
 
             logger.info(f"TTS/EdgeTTS [{self.module_id}] 初始化成功")
 
-        except asyncio.TimeoutError:
-            logger.error(f"TTS/EdgeTTS [{self.module_id}] 初始化超时")
-            raise ModuleInitializationError("EdgeTTS 初始化超时")
         except Exception as e:
-            logger.error(f"TTS/EdgeTTS [{self.module_id}] 初始化失败: {e}", exc_info=True)
-            raise ModuleInitializationError(f"EdgeTTS 初始化失败: {e}") from e
+            # 只捕获配置相关等严重错误，网络错误已经在上面处理了
+            logger.error(f"TTS/EdgeTTS [{self.module_id}] 初始化严重失败: {e}", exc_info=True)
+            raise ModuleInitializationError(f"EdgeTTS 初始化严重失败: {e}") from e
 
     async def _close_impl(self) -> None:
         """关闭 TTS 适配器"""
         logger.info(f"TTS/EdgeTTS [{self.module_id}] 已关闭")
 
     async def synthesize_stream(self, text: TextData) -> AsyncGenerator[AudioData, None]:
-        """流式合成语音"""
+        """流式合成语音（带重试机制）"""
         if not text.text or not text.text.strip():
             logger.debug(f"TTS/EdgeTTS [{self.module_id}] 文本为空")
             yield AudioData(
-                data=b" ",  # 使用占位符数据，因为 AudioData 不允许空 bytes
+                data=b" ",  # 使用占位符数据
                 format=self.output_format,
                 is_final=True,
                 metadata={"status": "empty_input"}
             )
             return
 
-        try:
-            logger.debug(f"TTS/EdgeTTS [{self.module_id}] 开始合成")
+        retries = 0
+        last_error = None
 
-            communicate = edge_tts.Communicate(
-                text.text,
-                self.voice,
-                rate=self.rate,
-                volume=self.volume,
-                pitch=self.pitch
-            )
+        while retries < self.max_retries:
+            try:
+                # 尝试执行合成
+                async for chunk in self._do_synthesize(text):
+                    yield chunk
+                return  # 成功完成
+            except Exception as e:
+                last_error = e
+                retries += 1
+                if retries < self.max_retries:
+                    logger.warning(
+                        f"TTS/EdgeTTS [{self.module_id}] 合成失败，{self.retry_delay}秒后重试 "
+                        f"({retries}/{self.max_retries}): {e}"
+                    )
+                    await asyncio.sleep(self.retry_delay)
 
-            chunk_index = 0
-            audio_buffer: list[bytes] = []  # 用于保存音频数据
+        # 所有重试都失败
+        logger.error(f"TTS/EdgeTTS [{self.module_id}] 合成最终失败，已重试 {self.max_retries} 次: {last_error}")
+        raise ModuleProcessingError(f"合成失败 (重试耗尽): {last_error}") from last_error
 
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    audio_bytes = chunk["data"]
-                    if audio_bytes:
-                        logger.debug(
-                            f"TTS/EdgeTTS [{self.module_id}] 生成音频块 {chunk_index}: {len(audio_bytes)} 字节"
-                        )
-                        # 收集音频数据用于保存
-                        if self.save_audio:
-                            audio_buffer.append(audio_bytes)
+    async def _do_synthesize(self, text: TextData) -> AsyncGenerator[AudioData, None]:
+        """实际执行合成逻辑"""
+        logger.debug(f"TTS/EdgeTTS [{self.module_id}] 开始合成")
 
-                        yield AudioData(
-                            data=audio_bytes,
-                            format=self.output_format,
-                            is_final=False,
-                            metadata={"chunk_index": chunk_index}
-                        )
-                        chunk_index += 1
+        communicate = edge_tts.Communicate(
+            text.text,
+            self.voice,
+            rate=self.rate,
+            volume=self.volume,
+            pitch=self.pitch
+        )
 
-            logger.debug(f"TTS/EdgeTTS [{self.module_id}] 合成结束，共 {chunk_index} 个音频块")
+        chunk_index = 0
+        audio_buffer: list[bytes] = []  # 用于保存音频数据
 
-            # 保存音频文件
-            saved_path: str | None = None
-            if self.save_audio and audio_buffer:
-                saved_path = self._save_audio_file(audio_buffer, text.text)
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_bytes = chunk["data"]
+                if audio_bytes:
+                    logger.debug(
+                        f"TTS/EdgeTTS [{self.module_id}] 生成音频块 {chunk_index}: {len(audio_bytes)} 字节"
+                    )
+                    # 收集音频数据用于保存
+                    if self.save_audio:
+                        audio_buffer.append(audio_bytes)
 
-            # 发送最终标记（使用占位符数据，因为 AudioData 不允许空 bytes）
-            yield AudioData(
-                data=b" ",
-                format=self.output_format,
-                is_final=True,
-                metadata={
-                    "status": "complete",
-                    "total_chunks": chunk_index,
-                    "saved_path": saved_path
-                }
-            )
+                    yield AudioData(
+                        data=audio_bytes,
+                        format=self.output_format,
+                        is_final=False,
+                        metadata={"chunk_index": chunk_index}
+                    )
+                    chunk_index += 1
 
-        except Exception as e:
-            logger.error(f"TTS/EdgeTTS [{self.module_id}] 合成失败: {e}", exc_info=True)
-            raise ModuleProcessingError(f"合成失败: {e}") from e
+        logger.debug(f"TTS/EdgeTTS [{self.module_id}] 合成结束，共 {chunk_index} 个音频块")
+
+        # 保存音频文件
+        saved_path: str | None = None
+        if self.save_audio and audio_buffer:
+            saved_path = self._save_audio_file(audio_buffer, text.text)
+
+        # 发送最终标记
+        yield AudioData(
+            data=b" ",  # 占位符
+            format=self.output_format,
+            is_final=True,
+            metadata={
+                "status": "complete",
+                "total_chunks": chunk_index,
+                "saved_path": saved_path
+            }
+        )
 
     def _save_audio_file(self, audio_chunks: list[bytes], text: str) -> str | None:
         """保存音频文件到指定目录
